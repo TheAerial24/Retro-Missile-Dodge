@@ -78,6 +78,8 @@ const COLORS = {
   bullet: '#ffff88',
   bg1: '#1e1e1e',
   bg2: '#393939',
+  heartFull: '#ff5555',
+  heartEmpty: '#333333',
   ammoFull: '#55ff55',
   ammoEmpty: '#333333'
 };
@@ -86,11 +88,15 @@ let gameOver = false;
 let frame = 0;
 let score = 0;
 
+// Health system
+const maxHearts = 10;
+let hearts = maxHearts;
+
 // Ammo system
 const maxAmmo = 75;
 let ammo = maxAmmo;
 let reloading = false;
-let reloadTime = 3000; // 3 seconds in ms
+let reloadTime = 3000;
 let lastReload = 0;
 
 // Plane
@@ -179,7 +185,7 @@ function spawnMissile() {
   missiles.push(m);
 }
 
-// Particle explosion
+// Particles
 const particles = [];
 function spawnExplosion(x, y, color='#ffcc44') {
   for (let i = 0; i < 8; i++) {
@@ -225,17 +231,20 @@ window.addEventListener('keyup', e => {
 
 // UI
 const scoreEl = document.getElementById('score');
+function drawHearts() {
+  const heartSize = 12;
+  for (let i = 0; i < maxHearts; i++) {
+    ctx.fillStyle = i < hearts ? COLORS.heartFull : COLORS.heartEmpty;
+    ctx.fillRect(10 + i*(heartSize+2), 10, heartSize, heartSize);
+  }
+}
 function drawAmmoBar() {
   const barWidth = 200;
   const barHeight = 8;
   const x = (W - barWidth) / 2;
   const y = plane.y + 30;
-
-  // background
   ctx.fillStyle = COLORS.ammoEmpty;
   ctx.fillRect(x, y, barWidth, barHeight);
-
-  // filled ammo
   const filledWidth = (ammo / maxAmmo) * barWidth;
   ctx.fillStyle = COLORS.ammoFull;
   ctx.fillRect(x, y, filledWidth, barHeight);
@@ -250,12 +259,9 @@ function loop() {
   if (gameOver) return;
   frame++;
 
-  // handle reload
-  if(reloading){
-    if(performance.now() - lastReload >= reloadTime){
-      ammo = maxAmmo;
-      reloading = false;
-    }
+  if(reloading && performance.now() - lastReload >= reloadTime){
+    ammo = maxAmmo;
+    reloading = false;
   }
 
   bgOffset += 2;
@@ -288,102 +294,9 @@ function loop() {
 
   for (let i = missiles.length - 1; i >= 0; i--) {
     const m = missiles[i];
-
     const dx = plane.x - m.x;
     const dy = plane.y - m.y;
     const dist = Math.hypot(dx, dy);
 
-    if(dist > 6){ // missiles stop homing within 6 pixels
-      const desiredAngle = Math.atan2(dy, dx);
-      const desiredVx = Math.cos(desiredAngle) * m.speed;
-      const desiredVy = Math.sin(desiredAngle) * m.speed;
-      m.vx += (desiredVx - m.vx) * m.homingStrength;
-      m.vy += (desiredVy - m.vy) * m.homingStrength;
-    }
-
-    m.x += m.vx;
-    m.y += m.vy;
-    m.speed = Math.hypot(m.vx, m.vy);
-    m.angle = Math.atan2(m.vy, m.vx);
-
-    m.draw();
-
-    // collision with bullets
-    let destroyed = false;
-    for (let j = bullets.length - 1; j >= 0; j--) {
-      const b = bullets[j];
-      const dx2 = b.x - m.x;
-      const dy2 = b.y - m.y;
-      if (Math.hypot(dx2, dy2) < (Math.max(m.w, m.h)/2 + Math.max(b.w, b.h)/2)) {
-        bullets.splice(j, 1);
-        missiles.splice(i, 1);
-        destroyed = true;
-        score += 10;
-        updateScoreDisplay();
-        spawnExplosion(m.x, m.y, '#ffcc44');
-        break;
-      }
-    }
-    if (destroyed) continue;
-
-    // collision with plane
-    const dxp = m.x - plane.x;
-    const dyp = m.y - plane.y;
-    const distp = Math.hypot(dxp, dyp);
-    const planeRadius = Math.max(plane.w, plane.h)/2 - 2;
-    const missileRadius = Math.max(m.w, m.h)/2 - 1;
-    if(distp < planeRadius + missileRadius){
-      endGame();
-      return;
-    }
-  }
-
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vy += 0.06;
-    p.life -= 1;
-    p.draw();
-    if(p.life <= 0) particles.splice(i,1);
-  }
-
-  for (let i = missiles.length - 1; i >= 0; i--){
-    const m = missiles[i];
-    if(m.x < -120 || m.x > W+120 || m.y > H+120 || m.y < -240) missiles.splice(i,1);
-  }
-
-  drawAmmoBar();
-  requestAnimationFrame(loop);
-}
-
-function endGame(){
-  gameOver = true;
-  document.getElementById('gameOver').style.display = 'block';
-  document.getElementById('finalScore').textContent = 'Score: ' + score;
-}
-
-// Restart button
-document.getElementById('restartBtn').addEventListener('click',()=>{
-  gameOver=false;
-  frame=0;
-  score=0;
-  ammo=maxAmmo;
-  reloading=false;
-  plane.x=W/2;
-  plane.y=H-60;
-  plane.vx=0;
-  plane.angle=0;
-  bullets.length=0;
-  missiles.length=0;
-  particles.length=0;
-  document.getElementById('gameOver').style.display='none';
-  updateScoreDisplay();
-  loop();
-});
-
-updateScoreDisplay();
-loop();
-</script>
-</body>
-</html>
+    if(dist > 6){
+      const desiredAngle = Math.atan2(dy,
