@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Plane Dodging Missiles (8-bit)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    canvas {
+      image-rendering: pixelated;
+      border: 4px solid #222;
+      background: #222;
+      box-shadow: 0 0 32px #111;
+    }
+    #gameOver {
+      position: absolute;
+      top: 40%;
+      left: 0; right: 0;
+      color: #ff4444;
+      font-family: monospace;
+      font-size: 2em;
+      text-align: center;
+      text-shadow: 2px 2px #000;
+      z-index: 10;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+<div id="gameOver">GAME OVER<br><small>Refresh to play again</small></div>
+<canvas id="game" width="320" height="480"></canvas>
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// 8-bit palette
+const COLORS = {
+  plane: ['#e0e0e0','#0077ff','#ff0000'],
+  missile: ['#ff2222','#cccccc','#222222'],
+  bg1: '#1e1e1e',
+  bg2: '#393939'
+};
+
+let gameOver = false;
+let frame = 0;
+
+// Plane
+const plane = {
+  x: W/2, y: H-60, w: 24, h: 20,
+  speed: 3.8,
+  vx: 0,
+  angle: 0,
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    // draw centered 8-bit plane using rectangles
+    // Body
+    ctx.fillStyle = COLORS.plane[0];
+    ctx.fillRect(-4, -8, 8, 16);
+    // Wings
+    ctx.fillStyle = COLORS.plane[1];
+    ctx.fillRect(-12, 2, 24, 4);
+    // Cockpit
+    ctx.fillStyle = COLORS.plane[2];
+    ctx.fillRect(-2, -14, 4, 6);
+    ctx.restore();
+  }
+};
+
+// Missiles
+const missiles = [];
+function spawnMissile() {
+  // randomly pick spawn side: left, right, or rear (top)
+  const r = Math.random();
+  const side = r < 0.34 ? 'left' : (r < 0.67 ? 'right' : 'rear');
+  let m = { w: 8, h: 20 };
+
+  if (side === 'left') {
+    m.x = -30;
+    m.y = 40 + Math.random() * (H - 120);
+    m.vx = 3.5 + Math.random() * 1.5;   // moving right
+    m.vy = (Math.random() - 0.2) * 1.5; // slight vertical
+  } else if (side === 'right') {
+    m.x = W + 30;
+    m.y = 40 + Math.random() * (H - 120);
+    m.vx = -3.5 - Math.random() * 1.5;  // moving left
+    m.vy = (Math.random() - 0.2) * 1.5;
+  } else { // rear/top
+    m.x = 24 + Math.random() * (W - 48);
+    m.y = -40;
+    m.vx = (Math.random() - 0.5) * 1.2; // small horizontal offset
+    m.vy = 3.8 + Math.random() * 1.7;   // downward
+  }
+
+  m.speed = Math.hypot(m.vx, m.vy);
+  m.angle = Math.atan2(m.vy, m.vx);
+  m.homingStrength = 0.02 + Math.random() * 0.03; // how strongly missile adjusts toward plane
+
+  m.draw = function() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    // rotate so the missile points in its travel direction (tip forward)
+    ctx.rotate(this.angle + Math.PI/2);
+    // missile body
+    ctx.fillStyle = COLORS.missile[1];
+    ctx.fillRect(-4, -8, 8, 16);
+    // tip
+    ctx.fillStyle = COLORS.missile[0];
+    ctx.fillRect(-2, -14, 4, 6);
+    // nose pixel
+    ctx.fillStyle = COLORS.missile[2];
+    ctx.fillRect(-1, -16, 2, 2);
+    ctx.restore();
+  };
+
+  missiles.push(m);
+}
+
+// Background scroll setup
+let bgOffset = 0;
+function drawBackground() {
+  for (let y = -32; y < H + 32; y += 32) {
+    ctx.fillStyle = ((Math.floor((y + bgOffset) / 32) % 2) === 0) ? COLORS.bg1 : COLORS.bg2;
+    ctx.fillRect(0, (y + (bgOffset % 32)), W, 32);
+  }
+}
+
+// Controls
+let left = false, right = false;
+window.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft') left = true;
+  if (e.key === 'ArrowRight') right = true;
+});
+window.addEventListener('keyup', e => {
+  if (e.key === 'ArrowLeft') left = false;
+  if (e.key === 'ArrowRight') right = false;
+});
+
+// Main game loop
+function loop() {
+  if (gameOver) return;
+  frame++;
+
+  // BG
+  bgOffset += 2;
+  drawBackground();
+
+  // Controls
+  plane.vx = 0;
+  if (left) plane.vx = -plane.speed;
+  if (right) plane.vx = plane.speed;
+  plane.x += plane.vx;
+  plane.x = Math.max(20, Math.min(W - 20, plane.x));
+
+  // plane tilt angle based on velocity (smooth)
+  const targetAngle = -plane.vx * 0.06; // negative so plane banks into turn
+  plane.angle += (targetAngle - plane.angle) * 0.18;
+
+  // Draw plane
+  plane.draw();
+
+  // Spawn missiles; spawn rate increases slowly over time
+  const spawnInterval = Math.max(18, 60 - Math.floor(frame / 700));
+  if (frame % spawnInterval === 0) spawnMissile();
+
+  // Update/draw missiles
+  for (let m of missiles) {
+    // homing behavior: slightly adjust velocity towards vector to plane
+    const dx = plane.x - m.x;
+    const dy = plane.y - m.y;
+    const desiredAngle = Math.atan2(dy, dx);
+    const desiredVx = Math.cos(desiredAngle) * m.speed;
+    const desiredVy = Math.sin(desiredAngle) * m.speed;
+
+    m.vx += (desiredVx - m.vx) * m.homingStrength;
+    m.vy += (desiredVy - m.vy) * m.homingStrength;
+
+    m.x += m.vx;
+    m.y += m.vy;
+    m.speed = Math.hypot(m.vx, m.vy);
+    m.angle = Math.atan2(m.vy, m.vx);
+    m.draw();
+  }
+
+  // Cleanup off-screen missiles
+  for (let i = missiles.length - 1; i >= 0; i--) {
+    const m = missiles[i];
+    if (m.x < -120 || m.x > W + 120 || m.y > H + 120 || m.y < -240) missiles.splice(i, 1);
+  }
+
+  // Collision (approximate with circles)
+  const planeRadius = Math.max(plane.w, plane.h) / 2 - 2;
+  for (let m of missiles) {
+    const dx = m.x - plane.x;
+    const dy = m.y - plane.y;
+    const dist = Math.hypot(dx, dy);
+    const missileRadius = Math.max(m.w, m.h) / 2 - 1;
+    if (dist < planeRadius + missileRadius) {
+      endGame();
+      return;
+    }
+  }
+
+  requestAnimationFrame(loop);
+}
+
+function endGame() {
+  gameOver = true;
+  document.getElementById('gameOver').style.display = 'block';
+}
+
+loop();
+</script>
+</body>
+</html>
