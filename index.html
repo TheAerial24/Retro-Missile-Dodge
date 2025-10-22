@@ -78,17 +78,20 @@ const COLORS = {
   bullet: '#ffff88',
   bg1: '#1e1e1e',
   bg2: '#393939',
-  heartFull: '#ff5555',
-  heartEmpty: '#333333'
+  ammoFull: '#55ff55',
+  ammoEmpty: '#333333'
 };
 
 let gameOver = false;
 let frame = 0;
 let score = 0;
 
-// Health system
-const maxHearts = 10;
-let hearts = maxHearts;
+// Ammo system
+const maxAmmo = 75;
+let ammo = maxAmmo;
+let reloading = false;
+let reloadTime = 3000; // 3 seconds in ms
+let lastReload = 0;
 
 // Plane
 const plane = {
@@ -116,7 +119,7 @@ let bulletCooldown = 0;
 const bulletCooldownMax = 12;
 
 function shoot() {
-  if (bulletCooldown <= 0 && !gameOver) {
+  if (bulletCooldown <= 0 && !gameOver && ammo > 0 && !reloading) {
     bullets.push({
       x: plane.x,
       y: plane.y - 14,
@@ -130,6 +133,11 @@ function shoot() {
       }
     });
     bulletCooldown = bulletCooldownMax;
+    ammo--;
+    if(ammo === 0){
+      reloading = true;
+      lastReload = performance.now();
+    }
   }
 }
 
@@ -217,13 +225,22 @@ window.addEventListener('keyup', e => {
 
 // UI
 const scoreEl = document.getElementById('score');
-function drawHearts() {
-  const heartSize = 12;
-  for (let i = 0; i < maxHearts; i++) {
-    ctx.fillStyle = i < hearts ? COLORS.heartFull : COLORS.heartEmpty;
-    ctx.fillRect(10 + i*(heartSize+2), 10, heartSize, heartSize);
-  }
+function drawAmmoBar() {
+  const barWidth = 200;
+  const barHeight = 8;
+  const x = (W - barWidth) / 2;
+  const y = plane.y + 30;
+
+  // background
+  ctx.fillStyle = COLORS.ammoEmpty;
+  ctx.fillRect(x, y, barWidth, barHeight);
+
+  // filled ammo
+  const filledWidth = (ammo / maxAmmo) * barWidth;
+  ctx.fillStyle = COLORS.ammoFull;
+  ctx.fillRect(x, y, filledWidth, barHeight);
 }
+
 function updateScoreDisplay() {
   scoreEl.textContent = 'Score: ' + score;
 }
@@ -232,6 +249,14 @@ function updateScoreDisplay() {
 function loop() {
   if (gameOver) return;
   frame++;
+
+  // handle reload
+  if(reloading){
+    if(performance.now() - lastReload >= reloadTime){
+      ammo = maxAmmo;
+      reloading = false;
+    }
+  }
 
   bgOffset += 2;
   drawBackground();
@@ -263,14 +288,18 @@ function loop() {
 
   for (let i = missiles.length - 1; i >= 0; i--) {
     const m = missiles[i];
+
     const dx = plane.x - m.x;
     const dy = plane.y - m.y;
-    const desiredAngle = Math.atan2(dy, dx);
-    const desiredVx = Math.cos(desiredAngle) * m.speed;
-    const desiredVy = Math.sin(desiredAngle) * m.speed;
+    const dist = Math.hypot(dx, dy);
 
-    m.vx += (desiredVx - m.vx) * m.homingStrength;
-    m.vy += (desiredVy - m.vy) * m.homingStrength;
+    if(dist > 6){ // missiles stop homing within 6 pixels
+      const desiredAngle = Math.atan2(dy, dx);
+      const desiredVx = Math.cos(desiredAngle) * m.speed;
+      const desiredVy = Math.sin(desiredAngle) * m.speed;
+      m.vx += (desiredVx - m.vx) * m.homingStrength;
+      m.vy += (desiredVy - m.vy) * m.homingStrength;
+    }
 
     m.x += m.vx;
     m.y += m.vy;
@@ -279,7 +308,7 @@ function loop() {
 
     m.draw();
 
-    // Check collision with bullets
+    // collision with bullets
     let destroyed = false;
     for (let j = bullets.length - 1; j >= 0; j--) {
       const b = bullets[j];
@@ -297,22 +326,15 @@ function loop() {
     }
     if (destroyed) continue;
 
-    // Check collision with plane
+    // collision with plane
     const dxp = m.x - plane.x;
     const dyp = m.y - plane.y;
     const distp = Math.hypot(dxp, dyp);
-    const planeRadius = Math.max(plane.w, plane.h) / 2 - 2;
-    const missileRadius = Math.max(m.w, m.h) / 2 - 1;
-
-    if (distp < planeRadius + missileRadius) {
-      hearts--;
-      spawnExplosion(m.x, m.y, '#ff4444');
-      missiles.splice(i,1);
-      if (hearts <= 0) {
-        endGame();
-        return;
-      }
-      continue;
+    const planeRadius = Math.max(plane.w, plane.h)/2 - 2;
+    const missileRadius = Math.max(m.w, m.h)/2 - 1;
+    if(distp < planeRadius + missileRadius){
+      endGame();
+      return;
     }
   }
 
@@ -323,40 +345,39 @@ function loop() {
     p.vy += 0.06;
     p.life -= 1;
     p.draw();
-    if (p.life <= 0) particles.splice(i, 1);
+    if(p.life <= 0) particles.splice(i,1);
   }
 
-  for (let i = missiles.length - 1; i >= 0; i--) {
+  for (let i = missiles.length - 1; i >= 0; i--){
     const m = missiles[i];
-    if (m.x < -120 || m.x > W + 120 || m.y > H + 120 || m.y < -240) missiles.splice(i, 1);
+    if(m.x < -120 || m.x > W+120 || m.y > H+120 || m.y < -240) missiles.splice(i,1);
   }
 
-  drawHearts();
+  drawAmmoBar();
   requestAnimationFrame(loop);
 }
 
-function endGame() {
+function endGame(){
   gameOver = true;
   document.getElementById('gameOver').style.display = 'block';
   document.getElementById('finalScore').textContent = 'Score: ' + score;
 }
 
-// Restart button logic
-const restartBtn = document.getElementById('restartBtn');
-restartBtn.addEventListener('click', () => {
-  gameOver = false;
-  frame = 0;
-  score = 0;
-  hearts = maxHearts;
-  plane.x = W/2;
-  plane.y = H-60;
-  plane.vx = 0;
-  plane.angle = 0;
-  bullets.length = 0;
-  missiles.length = 0;
-  particles.length = 0;
-
-  document.getElementById('gameOver').style.display = 'none';
+// Restart button
+document.getElementById('restartBtn').addEventListener('click',()=>{
+  gameOver=false;
+  frame=0;
+  score=0;
+  ammo=maxAmmo;
+  reloading=false;
+  plane.x=W/2;
+  plane.y=H-60;
+  plane.vx=0;
+  plane.angle=0;
+  bullets.length=0;
+  missiles.length=0;
+  particles.length=0;
+  document.getElementById('gameOver').style.display='none';
   updateScoreDisplay();
   loop();
 });
