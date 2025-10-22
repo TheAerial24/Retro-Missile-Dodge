@@ -77,16 +77,18 @@ const COLORS = {
   missile: ['#ff2222','#cccccc','#222222'],
   bullet: '#ffff88',
   bg1: '#1e1e1e',
-  bg2: '#393939'
+  bg2: '#393939',
+  heartFull: '#ff5555',
+  heartEmpty: '#333333'
 };
 
 let gameOver = false;
 let frame = 0;
 let score = 0;
 
-// Health / Lives
-let lives = 3;
-let hits = 0; // hits toward losing a life
+// Health system
+const maxHearts = 10;
+let hearts = maxHearts;
 
 // Plane
 const plane = {
@@ -215,11 +217,15 @@ window.addEventListener('keyup', e => {
 
 // UI
 const scoreEl = document.getElementById('score');
+function drawHearts() {
+  const heartSize = 12;
+  for (let i = 0; i < maxHearts; i++) {
+    ctx.fillStyle = i < hearts ? COLORS.heartFull : COLORS.heartEmpty;
+    ctx.fillRect(10 + i*(heartSize+2), 10, heartSize, heartSize);
+  }
+}
 function updateScoreDisplay() {
-  scoreEl.textContent = 'Score: ' + score + '  ';
-  let healthStr = '';
-  for (let i = 0; i < lives; i++) healthStr += '❤ ';
-  scoreEl.textContent += healthStr;
+  scoreEl.textContent = 'Score: ' + score;
 }
 
 // Main loop
@@ -299,18 +305,13 @@ function loop() {
     const missileRadius = Math.max(m.w, m.h) / 2 - 1;
 
     if (distp < planeRadius + missileRadius) {
-      hits++;
+      hearts--;
       spawnExplosion(m.x, m.y, '#ff4444');
       missiles.splice(i,1);
-      if (hits >= 2) {
-        lives--;
-        hits = 0;
-        if (lives <= 0) {
-          endGame();
-          return;
-        }
+      if (hearts <= 0) {
+        endGame();
+        return;
       }
-      updateScoreDisplay();
       continue;
     }
   }
@@ -330,6 +331,7 @@ function loop() {
     if (m.x < -120 || m.x > W + 120 || m.y > H + 120 || m.y < -240) missiles.splice(i, 1);
   }
 
+  drawHearts();
   requestAnimationFrame(loop);
 }
 
@@ -345,8 +347,7 @@ restartBtn.addEventListener('click', () => {
   gameOver = false;
   frame = 0;
   score = 0;
-  lives = 3;
-  hits = 0;
+  hearts = maxHearts;
   plane.x = W/2;
   plane.y = H-60;
   plane.vx = 0;
