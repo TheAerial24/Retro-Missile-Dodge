@@ -84,6 +84,10 @@ let gameOver = false;
 let frame = 0;
 let score = 0;
 
+// Health / Lives
+let lives = 3;
+let hits = 0; // hits toward losing a life
+
 // Plane
 const plane = {
   x: W/2, y: H-60, w: 24, h: 20,
@@ -212,7 +216,10 @@ window.addEventListener('keyup', e => {
 // UI
 const scoreEl = document.getElementById('score');
 function updateScoreDisplay() {
-  scoreEl.textContent = 'Score: ' + score;
+  scoreEl.textContent = 'Score: ' + score + '  ';
+  let healthStr = '';
+  for (let i = 0; i < lives; i++) healthStr += '❤ ';
+  scoreEl.textContent += healthStr;
 }
 
 // Main loop
@@ -266,6 +273,7 @@ function loop() {
 
     m.draw();
 
+    // Check collision with bullets
     let destroyed = false;
     for (let j = bullets.length - 1; j >= 0; j--) {
       const b = bullets[j];
@@ -283,14 +291,27 @@ function loop() {
     }
     if (destroyed) continue;
 
+    // Check collision with plane
     const dxp = m.x - plane.x;
     const dyp = m.y - plane.y;
     const distp = Math.hypot(dxp, dyp);
     const planeRadius = Math.max(plane.w, plane.h) / 2 - 2;
     const missileRadius = Math.max(m.w, m.h) / 2 - 1;
+
     if (distp < planeRadius + missileRadius) {
-      endGame();
-      return;
+      hits++;
+      spawnExplosion(m.x, m.y, '#ff4444');
+      missiles.splice(i,1);
+      if (hits >= 2) {
+        lives--;
+        hits = 0;
+        if (lives <= 0) {
+          endGame();
+          return;
+        }
+      }
+      updateScoreDisplay();
+      continue;
     }
   }
 
@@ -324,6 +345,8 @@ restartBtn.addEventListener('click', () => {
   gameOver = false;
   frame = 0;
   score = 0;
+  lives = 3;
+  hits = 0;
   plane.x = W/2;
   plane.y = H-60;
   plane.vx = 0;
