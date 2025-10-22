@@ -76,7 +76,6 @@ const plane = {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
-    // draw centered 8-bit plane using rectangles
     // Body
     ctx.fillStyle = COLORS.plane[0];
     ctx.fillRect(-4, -8, 8, 16);
@@ -90,10 +89,10 @@ const plane = {
   }
 };
 
-// Bullets (player shot)
+// Bullets
 const bullets = [];
 let bulletCooldown = 0;
-const bulletCooldownMax = 12; // frames
+const bulletCooldownMax = 12;
 
 function shoot() {
   if (bulletCooldown <= 0 && !gameOver) {
@@ -116,7 +115,6 @@ function shoot() {
 // Missiles
 const missiles = [];
 function spawnMissile() {
-  // randomly pick spawn side: left, right, or rear (top)
   const r = Math.random();
   const side = r < 0.34 ? 'left' : (r < 0.67 ? 'right' : 'rear');
   let m = { w: 8, h: 20 };
@@ -124,36 +122,32 @@ function spawnMissile() {
   if (side === 'left') {
     m.x = -30;
     m.y = 40 + Math.random() * (H - 120);
-    m.vx = 3.5 + Math.random() * 1.5;   // moving right
-    m.vy = (Math.random() - 0.2) * 1.5; // slight vertical
+    m.vx = 2 + Math.random() * 1;   // slower
+    m.vy = (Math.random() - 0.2) * 1;
   } else if (side === 'right') {
     m.x = W + 30;
     m.y = 40 + Math.random() * (H - 120);
-    m.vx = -3.5 - Math.random() * 1.5;  // moving left
-    m.vy = (Math.random() - 0.2) * 1.5;
+    m.vx = -2 - Math.random() * 1;  // slower
+    m.vy = (Math.random() - 0.2) * 1;
   } else { // rear/top
     m.x = 24 + Math.random() * (W - 48);
     m.y = -40;
-    m.vx = (Math.random() - 0.5) * 1.2; // small horizontal offset
-    m.vy = 3.8 + Math.random() * 1.7;   // downward
+    m.vx = (Math.random() - 0.5) * 0.8;
+    m.vy = 2 + Math.random() * 1;   // slower
   }
 
   m.speed = Math.hypot(m.vx, m.vy);
   m.angle = Math.atan2(m.vy, m.vx);
-  m.homingStrength = 0.02 + Math.random() * 0.03; // how strongly missile adjusts toward plane
+  m.homingStrength = 0.02 + Math.random() * 0.03;
 
   m.draw = function() {
     ctx.save();
     ctx.translate(this.x, this.y);
-    // rotate so the missile points in its travel direction (tip forward)
     ctx.rotate(this.angle + Math.PI/2);
-    // missile body
     ctx.fillStyle = COLORS.missile[1];
     ctx.fillRect(-4, -8, 8, 16);
-    // tip
     ctx.fillStyle = COLORS.missile[0];
     ctx.fillRect(-2, -14, 4, 6);
-    // nose pixel
     ctx.fillStyle = COLORS.missile[2];
     ctx.fillRect(-1, -16, 2, 2);
     ctx.restore();
@@ -162,7 +156,7 @@ function spawnMissile() {
   missiles.push(m);
 }
 
-// Simple particle explosion for destroyed missiles
+// Particle explosion
 const particles = [];
 function spawnExplosion(x, y, color='#ffcc44') {
   for (let i = 0; i < 8; i++) {
@@ -181,7 +175,7 @@ function spawnExplosion(x, y, color='#ffcc44') {
   }
 }
 
-// Background scroll setup
+// Background
 let bgOffset = 0;
 function drawBackground() {
   for (let y = -32; y < H + 32; y += 32) {
@@ -206,58 +200,48 @@ window.addEventListener('keyup', e => {
   if (e.code === 'Space') shooting = false;
 });
 
-// UI update
+// UI
 const scoreEl = document.getElementById('score');
 function updateScoreDisplay() {
   scoreEl.textContent = 'Score: ' + score;
 }
 
-// Main game loop
+// Main loop
 function loop() {
   if (gameOver) return;
   frame++;
 
-  // BG
   bgOffset += 2;
   drawBackground();
 
-  // Controls
   plane.vx = 0;
   if (left) plane.vx = -plane.speed;
   if (right) plane.vx = plane.speed;
   plane.x += plane.vx;
   plane.x = Math.max(20, Math.min(W - 20, plane.x));
 
-  // plane tilt angle based on velocity (smooth)
-  const targetAngle = -plane.vx * 0.06; // negative so plane banks into turn
+  // Plane tilt opposite way
+  const targetAngle = plane.vx * 0.06; 
   plane.angle += (targetAngle - plane.angle) * 0.18;
 
-  // Draw plane
   plane.draw();
 
-  // handle shooting cooldown & auto-shoot while holding space
   if (bulletCooldown > 0) bulletCooldown--;
   if (shooting && bulletCooldown <= 0) shoot();
 
-  // Spawn missiles; spawn rate increases slowly over time
   const spawnInterval = Math.max(18, 60 - Math.floor(frame / 700));
   if (frame % spawnInterval === 0) spawnMissile();
 
-  // Update/draw bullets
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
     b.x += b.vx;
     b.y += b.vy;
     b.draw();
-    // remove off-screen bullets
     if (b.y < -20 || b.x < -40 || b.x > W + 40) bullets.splice(i, 1);
   }
 
-  // Update/draw missiles
   for (let i = missiles.length - 1; i >= 0; i--) {
     const m = missiles[i];
-
-    // homing behavior: slightly adjust velocity towards vector to plane
     const dx = plane.x - m.x;
     const dy = plane.y - m.y;
     const desiredAngle = Math.atan2(dy, dx);
@@ -274,18 +258,16 @@ function loop() {
 
     m.draw();
 
-    // check collision with bullets
     let destroyed = false;
     for (let j = bullets.length - 1; j >= 0; j--) {
       const b = bullets[j];
       const dx2 = b.x - m.x;
       const dy2 = b.y - m.y;
       if (Math.hypot(dx2, dy2) < (Math.max(m.w, m.h)/2 + Math.max(b.w, b.h)/2)) {
-        // destroy missile and bullet
         bullets.splice(j, 1);
         missiles.splice(i, 1);
         destroyed = true;
-        score += 10; // award points for destroying a missile
+        score += 10;
         updateScoreDisplay();
         spawnExplosion(m.x, m.y, '#ffcc44');
         break;
@@ -293,7 +275,6 @@ function loop() {
     }
     if (destroyed) continue;
 
-    // if missile hits plane -> game over
     const dxp = m.x - plane.x;
     const dyp = m.y - plane.y;
     const distp = Math.hypot(dxp, dyp);
@@ -305,18 +286,16 @@ function loop() {
     }
   }
 
-  // Update/draw particles
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.x += p.vx;
     p.y += p.vy;
-    p.vy += 0.06; // gravity
+    p.vy += 0.06;
     p.life -= 1;
     p.draw();
     if (p.life <= 0) particles.splice(i, 1);
   }
 
-  // Cleanup off-screen missiles
   for (let i = missiles.length - 1; i >= 0; i--) {
     const m = missiles[i];
     if (m.x < -120 || m.x > W + 120 || m.y > H + 120 || m.y < -240) missiles.splice(i, 1);
@@ -331,9 +310,9 @@ function endGame() {
   document.getElementById('finalScore').textContent = 'Score: ' + score;
 }
 
-// initialize score display
 updateScoreDisplay();
 loop();
 </script>
 </body>
 </html>
+
