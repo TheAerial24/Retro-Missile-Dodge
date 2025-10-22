@@ -42,10 +42,28 @@ canvas {
   text-shadow: 1px 1px #000;
   z-index: 10;
 }
+#restartBtn {
+  margin-top: 8px;
+  padding: 6px 12px;
+  font-family: monospace;
+  font-size: 14px;
+  background: #222;
+  color: #fff;
+  border: 2px solid #555;
+  cursor: pointer;
+}
+#restartBtn:hover {
+  background: #333;
+  border-color: #888;
+}
 </style>
 </head>
 <body>
-<div id="gameOver">GAME OVER<br><small id="finalScore"></small><br><small>Refresh to play again</small></div>
+<div id="gameOver">
+  GAME OVER<br>
+  <small id="finalScore"></small><br>
+  <button id="restartBtn">Restart</button>
+</div>
 <div id="score"></div>
 <canvas id="game" width="320" height="480"></canvas>
 <script>
@@ -76,14 +94,10 @@ const plane = {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
-    // rotate from center
-    // Body
     ctx.fillStyle = COLORS.plane[0];
     ctx.fillRect(-4, -8, 8, 16);
-    // Wings
     ctx.fillStyle = COLORS.plane[1];
     ctx.fillRect(-12, 2, 24, 4);
-    // Cockpit
     ctx.fillStyle = COLORS.plane[2];
     ctx.fillRect(-2, -14, 4, 6);
     ctx.restore();
@@ -116,14 +130,13 @@ function shoot() {
 // Missiles
 const missiles = [];
 function spawnMissile() {
-  const r = Math.random();
-  const side = r < 0.5 ? 'left' : 'right'; // only left or right spawn
+  const side = Math.random() < 0.5 ? 'left' : 'right';
   let m = { w: 8, h: 20 };
 
   if (side === 'left') {
     m.x = -30;
-    m.y = 20 + Math.random() * (H/2 - 40); // top half only
-    m.vx = 1.8 + Math.random() * 0.8;   // slower and smoother
+    m.y = 20 + Math.random() * (H/2 - 40);
+    m.vx = 1.8 + Math.random() * 0.8;
     m.vy = (Math.random() - 0.2) * 0.8;
   } else { 
     m.x = W + 30;
@@ -134,7 +147,7 @@ function spawnMissile() {
 
   m.speed = Math.hypot(m.vx, m.vy);
   m.angle = Math.atan2(m.vy, m.vx);
-  m.homingStrength = 0.015 + Math.random() * 0.02; // smoother adjustment
+  m.homingStrength = 0.015 + Math.random() * 0.02;
 
   m.draw = function() {
     ctx.save();
@@ -216,7 +229,6 @@ function loop() {
   plane.x += plane.vx;
   plane.x = Math.max(20, Math.min(W - 20, plane.x));
 
-  // Plane tilt from center, smoother and slightly stronger
   const targetAngle = plane.vx * 0.08; 
   plane.angle += (targetAngle - plane.angle) * 0.12;
 
@@ -305,6 +317,25 @@ function endGame() {
   document.getElementById('gameOver').style.display = 'block';
   document.getElementById('finalScore').textContent = 'Score: ' + score;
 }
+
+// Restart button logic
+const restartBtn = document.getElementById('restartBtn');
+restartBtn.addEventListener('click', () => {
+  gameOver = false;
+  frame = 0;
+  score = 0;
+  plane.x = W/2;
+  plane.y = H-60;
+  plane.vx = 0;
+  plane.angle = 0;
+  bullets.length = 0;
+  missiles.length = 0;
+  particles.length = 0;
+
+  document.getElementById('gameOver').style.display = 'none';
+  updateScoreDisplay();
+  loop();
+});
 
 updateScoreDisplay();
 loop();
