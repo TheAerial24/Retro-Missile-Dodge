@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Dodging Missiles</title>
+<title>Plane Dodging Missiles (Gray Plane)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <style>
 body { margin:0; background:#87CEEB; display:flex; align-items:center; justify-content:center; height:100vh; overflow:hidden; }
@@ -18,7 +18,7 @@ const W=canvas.width,H=canvas.height;
 
 // Colors
 const COLORS={
-  plane:['#555','#888','#aaa'], // body, wings, cockpit
+  plane:['#555','#888','#aaa'],
   missile:['#ff2222','#cccccc','#222222'],
   bullet:'#ffff88',
   cloud:'#fff',
@@ -28,15 +28,15 @@ const COLORS={
 
 // Game state
 let score=0,health=5,maxHealth=5;
-let ammo=75,maxAmmo=75,reloadCooldown=0,reloadTime=120; // 2 seconds
+let ammo=75,maxAmmo=75,reloadCooldown=0,reloadTime=120;
 let reloading=false;
 
 // Plane
 const plane={x:W/2,y:H-60,w:24,h:20,speed:3.8,vx:0,angle:0,draw(){
   ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle);
-  ctx.fillStyle=COLORS.plane[0]; ctx.fillRect(-4,-8,8,16); // body
-  ctx.fillStyle=COLORS.plane[1]; ctx.fillRect(-12,2,24,4);  // wings
-  ctx.fillStyle=COLORS.plane[2]; ctx.fillRect(-2,-14,4,6);  // cockpit
+  ctx.fillStyle=COLORS.plane[0]; ctx.fillRect(-4,-8,8,16);
+  ctx.fillStyle=COLORS.plane[1]; ctx.fillRect(-12,2,24,4);
+  ctx.fillStyle=COLORS.plane[2]; ctx.fillRect(-2,-14,4,6);
   ctx.restore();
 }};
 
@@ -105,6 +105,12 @@ function drawHUD(){
   const x=plane.x-barWidth/2, y=plane.y+plane.h+10;
   ctx.fillStyle='#555'; ctx.fillRect(x,y,barWidth,barHeight);
   ctx.fillStyle=COLORS.ammo; ctx.fillRect(x,y,barWidth*(ammo/maxAmmo),barHeight);
+
+  // High Score (top-right)
+  ctx.fillStyle = '#fff';
+  ctx.font = '14px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText('High: ' + (parseInt(localStorage.getItem('highScore')) || 0), W-10, 16);
 }
 
 function loop(){
@@ -148,7 +154,18 @@ function loop(){
     const planeRadius=Math.max(plane.w,plane.h)/2-2;
     const missileRadius=Math.max(m.w,m.h)/2-1;
     if(dist<planeRadius+missileRadius){
-      spawnExplosion(m.x,m.y,'#ff4444'); missiles.splice(i,1); health--; if(health<=0){ alert('Game Over! Score: '+score); location.reload();} continue;
+      spawnExplosion(m.x,m.y,'#ff4444'); missiles.splice(i,1); health--; 
+      if(health <= 0){
+          const highScore = parseInt(localStorage.getItem('highScore')) || 0;
+          if(score > highScore){
+              localStorage.setItem('highScore', score);
+              alert('Game Over! New High Score: ' + score);
+          } else {
+              alert('Game Over! Score: ' + score + '\nHigh Score: ' + highScore);
+          }
+          location.reload();
+      }
+      continue;
     }
 
     // Bullet collision
