@@ -28,15 +28,21 @@ const COLORS={
 let frame=0,score=0;
 
 // Plane
-const plane={x:W/2,y:H-60,w:24,h:20,speed:3.8,vx:0,angle:0,draw(){
-  ctx.save();
-  ctx.translate(this.x,this.y);
-  ctx.rotate(this.angle);
-  ctx.fillStyle=COLORS.plane[0]; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h);
-  ctx.fillStyle=COLORS.plane[1]; ctx.fillRect(-this.w/2,-2,this.w,4);
-  ctx.fillStyle=COLORS.plane[2]; ctx.fillRect(-2,-this.h/2,this.w/4,6);
-  ctx.restore();
-}};
+const plane={
+  x:W/2,y:H-60,w:24,h:20,speed:3.8,vx:0,angle:0,
+  draw(){
+    ctx.save();
+    ctx.translate(this.x,this.y);
+    ctx.rotate(this.angle);
+    // Body
+    ctx.fillStyle=COLORS.plane[0]; ctx.fillRect(-4,-8,8,16);
+    // Wings
+    ctx.fillStyle=COLORS.plane[1]; ctx.fillRect(-12,2,24,4);
+    // Cockpit
+    ctx.fillStyle=COLORS.plane[2]; ctx.fillRect(-2,-14,4,6);
+    ctx.restore();
+  }
+};
 
 // Bullets
 const bullets=[]; let bulletCooldown=0; const bulletCooldownMax=12;
@@ -61,7 +67,7 @@ function spawnMissile(){
 const particles=[];
 function spawnExplosion(x,y,color='#ffcc44'){ for(let i=0;i<8;i++){ const angle=Math.random()*Math.PI*2; const speed=1+Math.random()*2; particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:30+Math.random()*20,draw(){ctx.fillStyle=color;ctx.fillRect(this.x-1,this.y-1,2,2);}}); }}
 
-// Clouds for background
+// Clouds
 const clouds=[];
 for(let i=0;i<15;i++){ clouds.push({x:Math.random()*W,y:Math.random()*H/2,w:40+Math.random()*30,h:20+Math.random()*10});}
 function drawBackground(){
@@ -110,13 +116,23 @@ function loop(){
     m.x+=m.vx; m.y+=m.vy; m.speed=Math.hypot(m.vx,m.vy); m.angle=Math.atan2(m.vy,m.vx);
     m.draw();
 
+    // Missile collision with plane
+    const planeRadius=Math.max(plane.w,plane.h)/2 - 2;
+    const missileRadius=Math.max(m.w,m.h)/2 - 1;
+    if(dist<planeRadius+missileRadius){
+      spawnExplosion(m.x,m.y,'#ff4444');
+      missiles.splice(i,1);
+      // Optional: game over logic here
+      continue;
+    }
+
     // Bullet collision
     let destroyed=false;
     for(let j=bullets.length-1;j>=0;j--){ const b=bullets[j]; if(Math.hypot(b.x-m.x,b.y-m.y)<(Math.max(m.w,m.h)/2+Math.max(b.w,b.h)/2)){ bullets.splice(j,1); missiles.splice(i,1); destroyed=true; score+=10; updateScoreDisplay(); spawnExplosion(m.x,m.y,'#ffcc44'); break;}}
     if(destroyed) continue;
 
     // Missile passed plane
-    if(m.y>plane.y+plane.h/2+6){score+=5;updateScoreDisplay();spawnExplosion(m.x,m.y,'#ffaa33');missiles.splice(i,1); continue;}
+    if(m.y>plane.y+plane.h/2+6){score+=5;updateScoreDisplay();spawnExplosion(m.x,m.y,'#ffaa33');missiles.splice(i,1);}
   }
 
   // Particles
