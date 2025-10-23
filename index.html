@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Plane Dodging Missiles (Gray Plane)</title>
+<title>Dodging Missiles</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <style>
 body { margin:0; background:#87CEEB; display:flex; align-items:center; justify-content:center; height:100vh; overflow:hidden; }
@@ -91,7 +91,7 @@ let frame=0;
 // HUD
 function drawHUD(){
   // Score
-  ctx.fillStyle='#fff'; ctx.font='14px monospace'; ctx.textAlign='left'; ctx.fillText('Score: '+score,10,16);
+  ctx.fillStyle='#000'; ctx.font='14px monospace'; ctx.textAlign='left'; ctx.fillText('Score: '+score,10,16);
 
   // Hearts
   for(let i=0;i<maxHealth;i++){
@@ -107,7 +107,7 @@ function drawHUD(){
   ctx.fillStyle=COLORS.ammo; ctx.fillRect(x,y,barWidth*(ammo/maxAmmo),barHeight);
 
   // High Score (top-right)
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = '#000';
   ctx.font = '14px monospace';
   ctx.textAlign = 'right';
   ctx.fillText('High: ' + (parseInt(localStorage.getItem('highScore')) || 0), W-10, 16);
