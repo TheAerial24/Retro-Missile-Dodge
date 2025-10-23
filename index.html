@@ -2,16 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Plane Dodging Missiles (Sky Edition)</title>
+<title>Plane Dodging Missiles (HUD Version)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <style>
 body { margin:0; background:#87CEEB; display:flex; align-items:center; justify-content:center; height:100vh; overflow:hidden; }
 canvas { image-rendering: pixelated; border:4px solid #222; box-shadow:0 0 32px #111; background:#87CEEB; }
-#score { position:absolute; top:8px; left:12px; color:#fff; font-family:monospace; font-size:14px; text-shadow:1px 1px #000; z-index:10; }
+#hud { position:absolute; top:8px; left:12px; font-family:monospace; color:#fff; text-shadow:1px 1px #000; z-index:10; }
 </style>
 </head>
 <body>
-<div id="score"></div>
+<div id="hud">Score: 0<br>Health: ♥♥♥<br>Ammo: ███████████████████████████████████████████████████████████████</div>
 <canvas id="game" width="320" height="480"></canvas>
 <script>
 const canvas=document.getElementById('game');
@@ -25,34 +25,41 @@ const COLORS={
   cloud:'#fff'
 };
 
-let frame=0,score=0;
+// HUD
+const hud=document.getElementById('hud');
+let score=0;
+let health=3;
+let ammo=75;
+const maxAmmo=75;
+let reloadCooldown=0;
+const reloadTime=180; // 3 seconds at 60fps
 
 // Plane
-const plane={
-  x:W/2,y:H-60,w:24,h:20,speed:3.8,vx:0,angle:0,
-  draw(){
-    ctx.save();
-    ctx.translate(this.x,this.y);
-    ctx.rotate(this.angle);
-    // Body
-    ctx.fillStyle=COLORS.plane[0]; ctx.fillRect(-4,-8,8,16);
-    // Wings
-    ctx.fillStyle=COLORS.plane[1]; ctx.fillRect(-12,2,24,4);
-    // Cockpit
-    ctx.fillStyle=COLORS.plane[2]; ctx.fillRect(-2,-14,4,6);
-    ctx.restore();
-  }
-};
+const plane={x:W/2,y:H-60,w:24,h:20,speed:3.8,vx:0,angle:0,draw(){
+  ctx.save();
+  ctx.translate(this.x,this.y);
+  ctx.rotate(this.angle);
+  ctx.fillStyle=COLORS.plane[0]; ctx.fillRect(-4,-8,8,16);
+  ctx.fillStyle=COLORS.plane[1]; ctx.fillRect(-12,2,24,4);
+  ctx.fillStyle=COLORS.plane[2]; ctx.fillRect(-2,-14,4,6);
+  ctx.restore();
+}};
 
 // Bullets
 const bullets=[]; let bulletCooldown=0; const bulletCooldownMax=12;
-function shoot(){ if(bulletCooldown<=0){ bullets.push({x:plane.x,y:plane.y-14,vx:0,vy:-6.5,w:2,h:6,draw(){ctx.fillStyle=COLORS.bullet;ctx.fillRect(this.x-this.w/2,this.y-this.h/2,this.w,this.h);}}); bulletCooldown=bulletCooldownMax;}}
+function shoot(){
+  if(bulletCooldown<=0 && ammo>0){
+    bullets.push({x:plane.x,y:plane.y-14,vx:0,vy:-6.5,w:2,h:6,draw(){ctx.fillStyle=COLORS.bullet;ctx.fillRect(this.x-this.w/2,this.y-this.h/2,this.w,this.h);}});
+    bulletCooldown=bulletCooldownMax;
+    ammo--;
+  }
+}
 
 // Missiles
 const missiles=[];
 function spawnMissile(){
   let m={w:8,h:20};
-  m.x=20+Math.random()*(W-40); // top half random x
+  m.x=20+Math.random()*(W-40); 
   m.y=-20; 
   m.vx=(Math.random()-0.5)*1.2; 
   m.vy=2+Math.random()*1.5;
@@ -82,8 +89,13 @@ let left=false,right=false,shooting=false;
 window.addEventListener('keydown',e=>{ if(e.key==='ArrowLeft') left=true; if(e.key==='ArrowRight') right=true; if(e.code==='Space'){shooting=true;shoot();}});
 window.addEventListener('keyup',e=>{ if(e.key==='ArrowLeft') left=false; if(e.key==='ArrowRight') right=false; if(e.code==='Space') shooting=false;});
 
-const scoreEl=document.getElementById('score');
-function updateScoreDisplay(){ scoreEl.textContent='Score: '+score; }
+let frame=0;
+
+function updateHUD(){
+  let healthStr=''; for(let i=0;i<health;i++) healthStr+='♥';
+  let ammoBar=Math.floor(ammo/5); let ammoStr=''; for(let i=0;i<15;i++) ammoStr+=(i<ammoBar?'█':' ');
+  hud.innerHTML=`Score: ${score}<br>Health: ${healthStr}<br>Ammo: ${ammoStr}`;
+}
 
 function loop(){
   frame++;
@@ -95,7 +107,13 @@ function loop(){
   const targetAngle=plane.vx*0.08; plane.angle+=(targetAngle-plane.angle)*0.12;
   plane.draw();
 
-  if(bulletCooldown>0) bulletCooldown--; if(shooting && bulletCooldown<=0) shoot();
+  if(bulletCooldown>0) bulletCooldown--; 
+  if(shooting && bulletCooldown<=0) shoot();
+
+  if(ammo<maxAmmo){
+    reloadCooldown++;
+    if(reloadCooldown>=reloadTime){ ammo=maxAmmo; reloadCooldown=0;}
+  }
 
   if(frame%40===0) spawnMissile();
 
@@ -106,7 +124,7 @@ function loop(){
   for(let i=missiles.length-1;i>=0;i--){
     const m=missiles[i];
     const dx=plane.x-m.x, dy=plane.y-m.y; const dist=Math.hypot(dx,dy);
-    if(dist>40){ // homing stops at ~2 jet heights
+    if(dist>40){
       const desiredAngle=Math.atan2(dy,dx);
       const desiredVx=Math.cos(desiredAngle)*m.speed;
       const desiredVy=Math.sin(desiredAngle)*m.speed;
@@ -117,31 +135,33 @@ function loop(){
     m.draw();
 
     // Missile collision with plane
-    const planeRadius=Math.max(plane.w,plane.h)/2 - 2;
-    const missileRadius=Math.max(m.w,m.h)/2 - 1;
+    const planeRadius=Math.max(plane.w,plane.h)/2-2;
+    const missileRadius=Math.max(m.w,m.h)/2-1;
     if(dist<planeRadius+missileRadius){
       spawnExplosion(m.x,m.y,'#ff4444');
       missiles.splice(i,1);
-      // Optional: game over logic here
+      health--;
+      if(health<=0){ alert('Game Over! Score: '+score); location.reload();}
       continue;
     }
 
     // Bullet collision
     let destroyed=false;
-    for(let j=bullets.length-1;j>=0;j--){ const b=bullets[j]; if(Math.hypot(b.x-m.x,b.y-m.y)<(Math.max(m.w,m.h)/2+Math.max(b.w,b.h)/2)){ bullets.splice(j,1); missiles.splice(i,1); destroyed=true; score+=10; updateScoreDisplay(); spawnExplosion(m.x,m.y,'#ffcc44'); break;}}
+    for(let j=bullets.length-1;j>=0;j--){ const b=bullets[j]; if(Math.hypot(b.x-m.x,b.y-m.y)<(Math.max(m.w,m.h)/2+Math.max(b.w,b.h)/2)){ bullets.splice(j,1); missiles.splice(i,1); destroyed=true; score+=10; spawnExplosion(m.x,m.y,'#ffcc44'); break;}}
     if(destroyed) continue;
 
     // Missile passed plane
-    if(m.y>plane.y+plane.h/2+6){score+=5;updateScoreDisplay();spawnExplosion(m.x,m.y,'#ffaa33');missiles.splice(i,1);}
+    if(m.y>plane.y+plane.h/2+6){score+=5;spawnExplosion(m.x,m.y,'#ffaa33');missiles.splice(i,1);}
   }
 
   // Particles
   for(let i=particles.length-1;i>=0;i--){ const p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=0.06; p.life--; p.draw(); if(p.life<=0) particles.splice(i,1);}
 
+  updateHUD();
   requestAnimationFrame(loop);
 }
 
-updateScoreDisplay();
+updateHUD();
 loop();
 </script>
 </body>
