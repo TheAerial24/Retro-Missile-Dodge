@@ -6,11 +6,10 @@
   <style>
     body { margin:0; background:#000; display:flex; align-items:center; justify-content:center; height:100vh; overflow:hidden; }
     canvas { image-rendering:pixelated; border:4px solid #222; background:#000; box-shadow:0 0 32px #111; }
-    #overlay, #endScreen {
-      position:absolute; inset:0; display:flex; justify-content:center; align-items:center;
+    #endScreen {
+      position:absolute; inset:0; display:none; justify-content:center; align-items:center;
       background:rgba(0,0,0,0.9); z-index:20; font-family:monospace; color:#fff;
     }
-    #endScreen { display:none; }
     .panel { background:#111; border:2px solid #333; padding:20px; text-align:center; box-shadow:0 0 24px #000; }
     .title { font-size:20px; color:#00d0ff; margin-bottom:12px; }
     .btn { margin-top:12px; font-family:monospace; font-size:14px; padding:8px 16px; background:#1a1a1a; color:#fff; border:2px solid #444; cursor:pointer; }
@@ -18,13 +17,6 @@
   </style>
 </head>
 <body>
-  <div id="overlay">
-    <div class="panel">
-      <div class="title">PLANE DODGER</div>
-      <div>Move: ← → &nbsp; | &nbsp; Shoot: Space</div>
-      <button id="startBtn" class="btn">Start Game</button>
-    </div>
-  </div>
   <div id="endScreen">
     <div class="panel">
       <div id="endScore" style="margin-bottom:12px;"></div>
@@ -37,7 +29,7 @@
 const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
 const W=canvas.width,H=canvas.height;
 const COLORS={plane:['#e0e0e0','#0077ff','#ff0000'],missile:['#ff2222','#ccc','#222'],bullet:'#ff0'};
-let started=false,gameOver=false,frame=0,score=0,lives=3,highScore=+localStorage.getItem('highScore')||0;
+let gameOver=false,frame=0,score=0,lives=3,highScore=+localStorage.getItem('highScore')||0;
 const plane={x:W/2,y:H-60,w:24,h:20,speed:3.8,vx:0,angle:0,invincible:0,doubleShot:0,
   draw(){ctx.save();ctx.translate(this.x,this.y);ctx.rotate(this.angle);if(this.invincible>0)ctx.globalAlpha=0.6;
     ctx.fillStyle=COLORS.plane[0];ctx.fillRect(-4,-8,8,16);
@@ -70,4 +62,14 @@ function loop(){if(gameOver)return;frame++;drawBackground();
     m.x+=m.vx;m.y+=m.vy;m.angle=Math.atan2(m.vy,m.vx);ctx.save();ctx.translate(m.x,m.y);ctx.rotate(m.angle+Math.PI/2);ctx.fillStyle='#ccc';ctx.fillRect(-4,-8,8,16);ctx.fillStyle='#f22';ctx.fillRect(-2,-14,4,6);ctx.restore();
     for(let j=bullets.length-1;j>=0;j--){let b=bullets[j];if(Math.hypot(b.x-m.x,b.y-m.y)<10){bullets.splice(j,1);missiles.splice(i,1);score+=10;spawnExplosion(m.x,m.y);break;}}
     if(Math.hypot(m.x-plane.x,m.y-plane.y)<16){if(plane.invincible>0){missiles.splice(i,1);spawnExplosion(m.x,m.y);}else{lives--;plane.invincible=90;if(lives<=0){endGame();return;}}}}
-  for(let i=particles.length-1
+  for(let i=particles.length-1;i>=0;i--){let p=particles[i];p.x+=p.vx;p.y+=p.vy;p.life--;ctx.fillStyle='#f80';ctx.fillRect(p.x,p.y,2,2);if(p.life<=0)particles.splice(i,1);}
+  drawHUD();
+  requestAnimationFrame(loop);}
+function endGame(){gameOver=true;document.getElementById('endScreen').style.display='flex';
+  document.getElementById('endScore').textContent=`Score: ${score}`;if(score>highScore){highScore=score;localStorage.setItem('highScore',highScore);}}
+document.getElementById('restartBtn').onclick=()=>{location.reload();};
+// Start immediately
+loop();
+</script>
+</body>
+</html>
