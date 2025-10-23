@@ -2,16 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Plane Dodging Missiles (HUD Version)</title>
+<title>Plane Dodging Missiles (Ammo Fix)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <style>
 body { margin:0; background:#87CEEB; display:flex; align-items:center; justify-content:center; height:100vh; overflow:hidden; }
 canvas { image-rendering: pixelated; border:4px solid #222; box-shadow:0 0 32px #111; background:#87CEEB; }
-#hud { position:absolute; top:8px; left:12px; font-family:monospace; color:#fff; text-shadow:1px 1px #000; z-index:10; }
 </style>
 </head>
 <body>
-<div id="hud">Score: 0<br>Health: ♥♥♥<br>Ammo: ███████████████████████████████████████████████████████████████</div>
 <canvas id="game" width="320" height="480"></canvas>
 <script>
 const canvas=document.getElementById('game');
@@ -22,23 +20,19 @@ const COLORS={
   plane:['#e0e0e0','#0077ff','#ff0000'],
   missile:['#ff2222','#cccccc','#222222'],
   bullet:'#ffff88',
-  cloud:'#fff'
+  cloud:'#fff',
+  heart:'#ff4444',
+  ammo:'#ffff88'
 };
 
-// HUD
-const hud=document.getElementById('hud');
-let score=0;
-let health=3;
-let ammo=75;
-const maxAmmo=75;
-let reloadCooldown=0;
-const reloadTime=180; // 3 seconds at 60fps
+// Game state
+let score=0,health=5,maxHealth=5;
+let ammo=75,maxAmmo=75,reloadCooldown=0,reloadTime=120; // 2 seconds at 60fps
+let reloading=false;
 
 // Plane
 const plane={x:W/2,y:H-60,w:24,h:20,speed:3.8,vx:0,angle:0,draw(){
-  ctx.save();
-  ctx.translate(this.x,this.y);
-  ctx.rotate(this.angle);
+  ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle);
   ctx.fillStyle=COLORS.plane[0]; ctx.fillRect(-4,-8,8,16);
   ctx.fillStyle=COLORS.plane[1]; ctx.fillRect(-12,2,24,4);
   ctx.fillStyle=COLORS.plane[2]; ctx.fillRect(-2,-14,4,6);
@@ -48,10 +42,10 @@ const plane={x:W/2,y:H-60,w:24,h:20,speed:3.8,vx:0,angle:0,draw(){
 // Bullets
 const bullets=[]; let bulletCooldown=0; const bulletCooldownMax=12;
 function shoot(){
-  if(bulletCooldown<=0 && ammo>0){
+  if(bulletCooldown<=0 && ammo>0 && !reloading){
     bullets.push({x:plane.x,y:plane.y-14,vx:0,vy:-6.5,w:2,h:6,draw(){ctx.fillStyle=COLORS.bullet;ctx.fillRect(this.x-this.w/2,this.y-this.h/2,this.w,this.h);}});
-    bulletCooldown=bulletCooldownMax;
-    ammo--;
+    bulletCooldown=bulletCooldownMax; ammo--;
+    if(ammo<=0){ reloading=true; reloadCooldown=0;}
   }
 }
 
@@ -77,12 +71,7 @@ function spawnExplosion(x,y,color='#ffcc44'){ for(let i=0;i<8;i++){ const angle=
 // Clouds
 const clouds=[];
 for(let i=0;i<15;i++){ clouds.push({x:Math.random()*W,y:Math.random()*H/2,w:40+Math.random()*30,h:20+Math.random()*10});}
-function drawBackground(){
-  ctx.fillStyle='#87CEEB';
-  ctx.fillRect(0,0,W,H);
-  ctx.fillStyle=COLORS.cloud;
-  clouds.forEach(c=>{ c.y+=0.3; if(c.y>H) c.y=-c.h; ctx.fillRect(c.x,c.y,c.w,c.h);});
-}
+function drawBackground(){ ctx.fillStyle='#87CEEB'; ctx.fillRect(0,0,W,H); ctx.fillStyle=COLORS.cloud; clouds.forEach(c=>{c.y+=0.3;if(c.y>H)c.y=-c.h;ctx.fillRect(c.x,c.y,c.w,c.h);});}
 
 // Controls
 let left=false,right=false,shooting=false;
@@ -91,17 +80,30 @@ window.addEventListener('keyup',e=>{ if(e.key==='ArrowLeft') left=false; if(e.ke
 
 let frame=0;
 
-function updateHUD(){
-  let healthStr=''; for(let i=0;i<health;i++) healthStr+='♥';
-  let ammoBar=Math.floor(ammo/5); let ammoStr=''; for(let i=0;i<15;i++) ammoStr+=(i<ammoBar?'█':' ');
-  hud.innerHTML=`Score: ${score}<br>Health: ${healthStr}<br>Ammo: ${ammoStr}`;
+// Draw HUD: hearts and ammo bar
+function drawHUD(){
+  // Score
+  ctx.fillStyle='#fff'; ctx.font='14px monospace'; ctx.textAlign='left'; ctx.fillText('Score: '+score,10,16);
+
+  // Hearts
+  for(let i=0;i<maxHealth;i++){
+    const x=10+i*14, y=30;
+    ctx.fillStyle=(i<health)?COLORS.heart:'#555';
+    ctx.fillRect(x,y,12,12);
+  }
+
+  // Ammo bar (bottom of plane)
+  const barWidth=75,barHeight=8;
+  const x=plane.x-barWidth/2, y=plane.y+plane.h+10;
+  ctx.fillStyle='#555'; ctx.fillRect(x,y,barWidth,barHeight);
+  ctx.fillStyle=COLORS.ammo; ctx.fillRect(x,y,barWidth*(ammo/maxAmmo),barHeight);
 }
 
 function loop(){
   frame++;
   drawBackground();
 
-  // Plane movement
+  // Plane
   plane.vx=0; if(left) plane.vx=-plane.speed; if(right) plane.vx=plane.speed;
   plane.x+=plane.vx; plane.x=Math.max(20,Math.min(W-20,plane.x));
   const targetAngle=plane.vx*0.08; plane.angle+=(targetAngle-plane.angle)*0.12;
@@ -110,9 +112,9 @@ function loop(){
   if(bulletCooldown>0) bulletCooldown--; 
   if(shooting && bulletCooldown<=0) shoot();
 
-  if(ammo<maxAmmo){
+  if(reloading){
     reloadCooldown++;
-    if(reloadCooldown>=reloadTime){ ammo=maxAmmo; reloadCooldown=0;}
+    if(reloadCooldown>=reloadTime){ ammo=maxAmmo; reloading=false;}
   }
 
   if(frame%40===0) spawnMissile();
@@ -138,11 +140,7 @@ function loop(){
     const planeRadius=Math.max(plane.w,plane.h)/2-2;
     const missileRadius=Math.max(m.w,m.h)/2-1;
     if(dist<planeRadius+missileRadius){
-      spawnExplosion(m.x,m.y,'#ff4444');
-      missiles.splice(i,1);
-      health--;
-      if(health<=0){ alert('Game Over! Score: '+score); location.reload();}
-      continue;
+      spawnExplosion(m.x,m.y,'#ff4444'); missiles.splice(i,1); health--; if(health<=0){ alert('Game Over! Score: '+score); location.reload();} continue;
     }
 
     // Bullet collision
@@ -157,11 +155,10 @@ function loop(){
   // Particles
   for(let i=particles.length-1;i>=0;i--){ const p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=0.06; p.life--; p.draw(); if(p.life<=0) particles.splice(i,1);}
 
-  updateHUD();
+  drawHUD();
   requestAnimationFrame(loop);
 }
 
-updateHUD();
 loop();
 </script>
 </body>
