@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Plane Dodging Missiles (Ammo Fix)</title>
+<title>Plane Dodging Missiles (Gray Plane)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <style>
 body { margin:0; background:#87CEEB; display:flex; align-items:center; justify-content:center; height:100vh; overflow:hidden; }
@@ -16,8 +16,9 @@ const canvas=document.getElementById('game');
 const ctx=canvas.getContext('2d');
 const W=canvas.width,H=canvas.height;
 
+// Colors
 const COLORS={
-  plane:['#e0e0e0','#0077ff','#ff0000'],
+  plane:['#555','#888','#aaa'], // body, wings, cockpit
   missile:['#ff2222','#cccccc','#222222'],
   bullet:'#ffff88',
   cloud:'#fff',
@@ -27,15 +28,15 @@ const COLORS={
 
 // Game state
 let score=0,health=5,maxHealth=5;
-let ammo=75,maxAmmo=75,reloadCooldown=0,reloadTime=120; // 2 seconds at 60fps
+let ammo=75,maxAmmo=75,reloadCooldown=0,reloadTime=120; // 2 seconds
 let reloading=false;
 
 // Plane
 const plane={x:W/2,y:H-60,w:24,h:20,speed:3.8,vx:0,angle:0,draw(){
   ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle);
-  ctx.fillStyle=COLORS.plane[0]; ctx.fillRect(-4,-8,8,16);
-  ctx.fillStyle=COLORS.plane[1]; ctx.fillRect(-12,2,24,4);
-  ctx.fillStyle=COLORS.plane[2]; ctx.fillRect(-2,-14,4,6);
+  ctx.fillStyle=COLORS.plane[0]; ctx.fillRect(-4,-8,8,16); // body
+  ctx.fillStyle=COLORS.plane[1]; ctx.fillRect(-12,2,24,4);  // wings
+  ctx.fillStyle=COLORS.plane[2]; ctx.fillRect(-2,-14,4,6);  // cockpit
   ctx.restore();
 }};
 
@@ -53,12 +54,9 @@ function shoot(){
 const missiles=[];
 function spawnMissile(){
   let m={w:8,h:20};
-  m.x=20+Math.random()*(W-40); 
-  m.y=-20; 
-  m.vx=(Math.random()-0.5)*1.2; 
-  m.vy=2+Math.random()*1.5;
-  m.speed=Math.hypot(m.vx,m.vy);
-  m.angle=Math.atan2(m.vy,m.vx);
+  m.x=20+Math.random()*(W-40); m.y=-20; 
+  m.vx=(Math.random()-0.5)*1.2; m.vy=2+Math.random()*1.5;
+  m.speed=Math.hypot(m.vx,m.vy); m.angle=Math.atan2(m.vy,m.vx);
   m.homingStrength=0.02+Math.random()*0.02;
   m.draw=function(){ctx.save();ctx.translate(this.x,this.y);ctx.rotate(this.angle+Math.PI/2);ctx.fillStyle=COLORS.missile[1];ctx.fillRect(-4,-8,8,16);ctx.fillStyle=COLORS.missile[0];ctx.fillRect(-2,-14,4,6);ctx.fillStyle=COLORS.missile[2];ctx.fillRect(-1,-16,2,2);ctx.restore();}
   missiles.push(m);
@@ -66,12 +64,22 @@ function spawnMissile(){
 
 // Particles
 const particles=[];
-function spawnExplosion(x,y,color='#ffcc44'){ for(let i=0;i<8;i++){ const angle=Math.random()*Math.PI*2; const speed=1+Math.random()*2; particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:30+Math.random()*20,draw(){ctx.fillStyle=color;ctx.fillRect(this.x-1,this.y-1,2,2);}}); }}
+function spawnExplosion(x,y,color='#ffcc44'){ 
+  for(let i=0;i<8;i++){ 
+    const angle=Math.random()*Math.PI*2; 
+    const speed=1+Math.random()*2; 
+    particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:30+Math.random()*20,draw(){ctx.fillStyle=color;ctx.fillRect(this.x-1,this.y-1,2,2);}}); 
+  }
+}
 
 // Clouds
 const clouds=[];
 for(let i=0;i<15;i++){ clouds.push({x:Math.random()*W,y:Math.random()*H/2,w:40+Math.random()*30,h:20+Math.random()*10});}
-function drawBackground(){ ctx.fillStyle='#87CEEB'; ctx.fillRect(0,0,W,H); ctx.fillStyle=COLORS.cloud; clouds.forEach(c=>{c.y+=0.3;if(c.y>H)c.y=-c.h;ctx.fillRect(c.x,c.y,c.w,c.h);});}
+function drawBackground(){ 
+  ctx.fillStyle='#87CEEB'; ctx.fillRect(0,0,W,H); 
+  ctx.fillStyle=COLORS.cloud; 
+  clouds.forEach(c=>{c.y+=0.3;if(c.y>H)c.y=-c.h;ctx.fillRect(c.x,c.y,c.w,c.h);});
+}
 
 // Controls
 let left=false,right=false,shooting=false;
@@ -80,7 +88,7 @@ window.addEventListener('keyup',e=>{ if(e.key==='ArrowLeft') left=false; if(e.ke
 
 let frame=0;
 
-// Draw HUD: hearts and ammo bar
+// HUD
 function drawHUD(){
   // Score
   ctx.fillStyle='#fff'; ctx.font='14px monospace'; ctx.textAlign='left'; ctx.fillText('Score: '+score,10,16);
@@ -136,7 +144,7 @@ function loop(){
     m.x+=m.vx; m.y+=m.vy; m.speed=Math.hypot(m.vx,m.vy); m.angle=Math.atan2(m.vy,m.vx);
     m.draw();
 
-    // Missile collision with plane
+    // Collision
     const planeRadius=Math.max(plane.w,plane.h)/2-2;
     const missileRadius=Math.max(m.w,m.h)/2-1;
     if(dist<planeRadius+missileRadius){
