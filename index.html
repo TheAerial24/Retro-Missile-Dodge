@@ -20,18 +20,6 @@ canvas {
   background: #222;
   box-shadow: 0 0 32px #111;
 }
-#gameOver {
-  position: absolute;
-  top: 36%;
-  left: 0; right: 0;
-  color: #ff4444;
-  font-family: monospace;
-  font-size: 1.6em;
-  text-align: center;
-  text-shadow: 2px 2px #000;
-  z-index: 10;
-  display: none;
-}
 #score {
   position: absolute;
   top: 8px;
@@ -42,28 +30,9 @@ canvas {
   text-shadow: 1px 1px #000;
   z-index: 10;
 }
-#restartBtn {
-  margin-top: 8px;
-  padding: 6px 12px;
-  font-family: monospace;
-  font-size: 14px;
-  background: #222;
-  color: #fff;
-  border: 2px solid #555;
-  cursor: pointer;
-}
-#restartBtn:hover {
-  background: #333;
-  border-color: #888;
-}
 </style>
 </head>
 <body>
-<div id="gameOver">
-  GAME OVER<br>
-  <small id="finalScore"></small><br>
-  <button id="restartBtn">Restart</button>
-</div>
 <div id="score"></div>
 <canvas id="game" width="320" height="480"></canvas>
 <script>
@@ -71,33 +40,16 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 
-// 8-bit palette
 const COLORS = {
   plane: ['#e0e0e0','#0077ff','#ff0000'],
   missile: ['#ff2222','#cccccc','#222222'],
   bullet: '#ffff88',
   bg1: '#1e1e1e',
-  bg2: '#393939',
-  heartFull: '#ff5555',
-  heartEmpty: '#333333',
-  ammoFull: '#55ff55',
-  ammoEmpty: '#333333'
+  bg2: '#393939'
 };
 
-let gameOver = false;
 let frame = 0;
 let score = 0;
-
-// Health system
-const maxHearts = 10;
-let hearts = maxHearts;
-
-// Ammo system
-const maxAmmo = 75;
-let ammo = maxAmmo;
-let reloading = false;
-let reloadTime = 3000;
-let lastReload = 0;
 
 // Plane
 const plane = {
@@ -123,9 +75,8 @@ const plane = {
 const bullets = [];
 let bulletCooldown = 0;
 const bulletCooldownMax = 12;
-
 function shoot() {
-  if (bulletCooldown <= 0 && !gameOver && ammo > 0 && !reloading) {
+  if (bulletCooldown <= 0) {
     bullets.push({
       x: plane.x,
       y: plane.y - 14,
@@ -139,11 +90,6 @@ function shoot() {
       }
     });
     bulletCooldown = bulletCooldownMax;
-    ammo--;
-    if(ammo === 0){
-      reloading = true;
-      lastReload = performance.now();
-    }
   }
 }
 
@@ -167,7 +113,7 @@ function spawnMissile() {
 
   m.speed = Math.hypot(m.vx, m.vy);
   m.angle = Math.atan2(m.vy, m.vx);
-  m.homingStrength = 0.015 + Math.random() * 0.02;
+  m.homingStrength = 0.02 + Math.random() * 0.02;
 
   m.draw = function() {
     ctx.save();
@@ -214,89 +160,123 @@ function drawBackground() {
 }
 
 // Controls
-let left = false, right = false, shooting = false;
-window.addEventListener('keydown', e => {
-  if (e.key === 'ArrowLeft') left = true;
-  if (e.key === 'ArrowRight') right = true;
-  if (e.code === 'Space') {
-    shooting = true;
-    shoot();
-  }
+let left=false, right=false, shooting=false;
+window.addEventListener('keydown', e=>{
+  if(e.key==='ArrowLeft') left=true;
+  if(e.key==='ArrowRight') right=true;
+  if(e.code==='Space'){ shooting=true; shoot(); }
 });
-window.addEventListener('keyup', e => {
-  if (e.key === 'ArrowLeft') left = false;
-  if (e.key === 'ArrowRight') right = false;
-  if (e.code === 'Space') shooting = false;
+window.addEventListener('keyup', e=>{
+  if(e.key==='ArrowLeft') left=false;
+  if(e.key==='ArrowRight') right=false;
+  if(e.code==='Space') shooting=false;
 });
 
-// UI
 const scoreEl = document.getElementById('score');
-function drawHearts() {
-  const heartSize = 12;
-  for (let i = 0; i < maxHearts; i++) {
-    ctx.fillStyle = i < hearts ? COLORS.heartFull : COLORS.heartEmpty;
-    ctx.fillRect(10 + i*(heartSize+2), 10, heartSize, heartSize);
-  }
-}
-function drawAmmoBar() {
-  const barWidth = 200;
-  const barHeight = 8;
-  const x = (W - barWidth) / 2;
-  const y = plane.y + 30;
-  ctx.fillStyle = COLORS.ammoEmpty;
-  ctx.fillRect(x, y, barWidth, barHeight);
-  const filledWidth = (ammo / maxAmmo) * barWidth;
-  ctx.fillStyle = COLORS.ammoFull;
-  ctx.fillRect(x, y, filledWidth, barHeight);
-}
+function updateScoreDisplay() { scoreEl.textContent = 'Score: ' + score; }
 
-function updateScoreDisplay() {
-  scoreEl.textContent = 'Score: ' + score;
-}
-
-// Main loop
 function loop() {
-  if (gameOver) return;
   frame++;
-
-  if(reloading && performance.now() - lastReload >= reloadTime){
-    ammo = maxAmmo;
-    reloading = false;
-  }
-
   bgOffset += 2;
   drawBackground();
 
+  // Plane movement
   plane.vx = 0;
-  if (left) plane.vx = -plane.speed;
-  if (right) plane.vx = plane.speed;
+  if(left) plane.vx = -plane.speed;
+  if(right) plane.vx = plane.speed;
   plane.x += plane.vx;
-  plane.x = Math.max(20, Math.min(W - 20, plane.x));
+  plane.x = Math.max(20, Math.min(W-20, plane.x));
 
-  const targetAngle = plane.vx * 0.08; 
+  // Plane tilt (smooth)
+  const targetAngle = plane.vx * 0.08;
   plane.angle += (targetAngle - plane.angle) * 0.12;
 
   plane.draw();
 
-  if (bulletCooldown > 0) bulletCooldown--;
-  if (shooting && bulletCooldown <= 0) shoot();
+  if(bulletCooldown>0) bulletCooldown--;
+  if(shooting && bulletCooldown<=0) shoot();
 
-  const spawnInterval = Math.max(20, 60 - Math.floor(frame / 800));
-  if (frame % spawnInterval === 0) spawnMissile();
+  const spawnInterval = Math.max(20, 60 - Math.floor(frame/800));
+  if(frame % spawnInterval === 0) spawnMissile();
 
-  for (let i = bullets.length - 1; i >= 0; i--) {
-    const b = bullets[i];
-    b.x += b.vx;
-    b.y += b.vy;
+  // Bullets update
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i];
+    b.x+=b.vx; b.y+=b.vy;
     b.draw();
-    if (b.y < -20 || b.x < -40 || b.x > W + 40) bullets.splice(i, 1);
+    if(b.y<-20 || b.x<-40 || b.x>W+40) bullets.splice(i,1);
   }
 
-  for (let i = missiles.length - 1; i >= 0; i--) {
-    const m = missiles[i];
+  // Missiles update
+  for(let i=missiles.length-1;i>=0;i--){
+    const m=missiles[i];
     const dx = plane.x - m.x;
     const dy = plane.y - m.y;
     const dist = Math.hypot(dx, dy);
 
-    if(dist > 6){
-      const desiredAngle = Math.atan2(dy,
+    // Homing stops within 2 jet heights (~40px)
+    if(dist > 40){
+      const desiredAngle = Math.atan2(dy, dx);
+      const desiredVx = Math.cos(desiredAngle) * m.speed;
+      const desiredVy = Math.sin(desiredAngle) * m.speed;
+      m.vx += (desiredVx - m.vx) * m.homingStrength;
+      m.vy += (desiredVy - m.vy) * m.homingStrength;
+    }
+
+    m.x += m.vx;
+    m.y += m.vy;
+    m.speed = Math.hypot(m.vx, m.vy);
+    m.angle = Math.atan2(m.vy, m.vx);
+
+    m.draw();
+
+    // Bullet collision
+    let destroyed=false;
+    for(let j=bullets.length-1;j>=0;j--){
+      const b=bullets[j];
+      if(Math.hypot(b.x-m.x,b.y-m.y)<(Math.max(m.w,m.h)/2+Math.max(b.w,b.h)/2)){
+        bullets.splice(j,1);
+        missiles.splice(i,1);
+        destroyed=true;
+        score+=10;
+        updateScoreDisplay();
+        spawnExplosion(m.x,m.y,'#ffcc44');
+        break;
+      }
+    }
+    if(destroyed) continue;
+
+    // Missile past plane
+    if(m.y > plane.y + plane.h/2 + 6){
+      score += 5;
+      updateScoreDisplay();
+      spawnExplosion(m.x,m.y,'#ffaa33');
+      missiles.splice(i,1);
+      continue;
+    }
+  }
+
+  // Particles update
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx; p.y+=p.vy;
+    p.vy+=0.06;
+    p.life--;
+    p.draw();
+    if(p.life<=0) particles.splice(i,1);
+  }
+
+  // Cleanup off-screen missiles
+  for(let i=missiles.length-1;i>=0;i--){
+    const m=missiles[i];
+    if(m.x<-120 || m.x>W+120 || m.y>H+120 || m.y<-240) missiles.splice(i,1);
+  }
+
+  requestAnimationFrame(loop);
+}
+
+updateScoreDisplay();
+loop();
+</script>
+</body>
+</html>
