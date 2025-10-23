@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Plane Dodging Missiles (8-bit)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    canvas {
+      image-rendering: pixelated;
+      border: 4px solid #222;
+      background: #000;
+      box-shadow: 0 0 32px #111;
+    }
+    #hud {
+      position: absolute;
+      top: 8px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      font-family: monospace;
+      font-size: 14px;
+      color: #fff;
+      text-shadow: 1px 1px #000;
+      z-index: 10;
+      pointer-events: none;
+    }
+    #overlay, #endScreen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0,0,0,0.9);
+      z-index: 20;
+      font-family: monospace;
+      color: #fff;
+    }
+    #endScreen { display: none; }
+    .panel {
+      background: #111;
+      border: 2px solid #333;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 0 24px #000;
+    }
+    .title {
+      font-size: 20px;
+      color: #00d0ff;
+      margin-bottom: 12px;
+    }
+    .btn {
+      margin-top: 12px;
+      font-family: monospace;
+      font-size: 14px;
+      padding: 8px 16px;
+      background: #1a1a1a;
+      color: #fff;
+      border: 2px solid #444;
+      cursor: pointer;
+    }
+    .btn:hover { border-color: #00d0ff; color: #00d0ff; }
+  </style>
+</head>
+<body>
+  <!-- Start screen -->
+  <div id="overlay">
+    <div class="panel">
+      <div class="title">PLANE DODGER</div>
+      <div>Move: ← → &nbsp; | &nbsp; Shoot: Space</div>
+      <button id="startBtn" class="btn">Start Game</button>
+    </div>
+  </div>
+
+  <!-- End screen -->
+  <div id="endScreen">
+    <div class="panel">
+      <div id="endScore" style="margin-bottom:12px;"></div>
+      <button id="restartBtn" class="btn">Restart</button>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="score"></div>
+    <div id="ammo"></div>
+    <div id="lives"></div>
+  </div>
+
+  <canvas id="game" width="320" height="480"></canvas>
+
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+
+const COLORS={plane:['#e0e0e0','#0077ff','#ff0000'],missile:['#ff2222','#cccccc','#222222'],bullet:'#ffff88'};
+
+let started=false,gameOver=false;
+let frame=0,score=0,lives=3;
+let highScore=Number(localStorage.getItem('highScore')||0);
+
+const plane={x:W/2,y:H-60,w:24,h:20,speed:3.8,vx:0,angle:0,invincible:0,doubleShot:0,
+  draw(){ctx.save();ctx.translate(this.x,this.y);ctx.rotate(this.angle);
+    if(this.invincible>0) ctx.globalAlpha=0.6;
+    ctx.fillStyle=COLORS.plane[0];ctx.fillRect(-4,-8,8,16);
+    ctx.fillStyle=COLORS.plane[1];ctx.fillRect(-12,2,24,4);
+    ctx.fillStyle=COLORS.plane[2];ctx.fillRect(-2,-14,4,6);
+    ctx.restore();ctx.globalAlpha=1;}
+};
+
+const bullets=[];let bulletCooldown=0;let bulletCooldownMax=12;
+function makeBullet(x,y){return{x,y,vx:0,vy:-6.5,w:2,h:6,draw(){ctx.fillStyle=COLORS.bullet;ctx.fillRect(this.x-this.w/2,this.y-this.h/2,this.w,this.h);}};}
+function shoot(){if(bulletCooldown<=0&&!gameOver){if(plane.doubleShot>0){bullets.push(makeBullet(plane.x-6,plane.y-14));bullets.push(makeBullet(plane.x+6,plane.y-14));}else bullets.push(makeBullet(plane.x,plane.y-14));bulletCooldown=bulletCooldownMax;}}
+
+const missiles=[];
+function spawnMissile(){const r=Math.random();const side=r<0.34?'left':(r<0.67?'right':'rear');let m={w:8,h:20,homing:true};
+  if(side==='left'){m.x=-30;m.y=40+Math.random()*(H-120);m.vx=3.5+Math.random()*1.5;m.vy=(Math.random()-0.2)*1.5;}
+  else if(side==='right'){m.x=W+30;m.y=40+Math.random()*(H-120);m.vx=-3.5-Math.random()*1.5;m.vy=(Math.random()-0.2)*1.5;}
+  else{m.x=24+Math.random()*(W-48);m.y=-40;m.vx=(Math.random()-0.5)*1.2;m.vy=3.8+Math.random()*1.7;}
+  m.speed=Math.hypot(m.vx,m.vy);m.angle=Math.atan2(m.vy,m.vx);
+  m.homingStrength=0.02+Math.random()*0.03+frame/50000;
+  m.draw=function(){ctx.save();ctx.translate(this.x,this.y);ctx.rotate(this.angle+Math.PI/2);
+    ctx.fillStyle=COLORS.missile[1];ctx.fillRect(-4,-8,8,16);
+    ctx.fillStyle=COLORS.missile[0];ctx.fillRect(-2,-14,4,6);
+    ctx.fillStyle=COLORS.missile[2];ctx.fillRect(-1,-16,2,2);
+    ctx.restore();};
+  missiles.push(m);}
+
+const particles=[];
+function spawnExplosion(x,y,color='#ffcc44'){for(let i=0;i<8;i++){const a=Math.random()*Math.PI*2;const s=1+Math.random()*2.5;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:30+Math.random()*20,draw(){ctx.fillStyle=color;ctx.fillRect(this.x-1,this.y-1,2,2);}});}}
+
+const stars=Array.from({length:80},()=>({x:Math.random()*W,y:Math.random()*H,s:Math.random()*2+1}));
+function drawBackground(){ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';for(let star of stars){ctx.fillRect(star.x,star.y,star.s,star.s);star.y+=star.s*0.5;if(star.y>H){star.y=0;star.x=Math.random()*W;}}}
+
+let left=false,right=false,shooting=false;
+window.addEventListener('keydown',e=>{if(e.key==='ArrowLeft') left=true;if(e.key==='ArrowRight') right=true;if(e.code==='Space'){shooting=true;shoot();}});
+window.addEventListener('keyup',e=>{if(e.key==='ArrowLeft') left=false;if(e.key==='ArrowRight') right=false;if(e.code==='Space') shooting=false;});
+
+const scoreEl=document.getElementById('score');
+const livesEl=document.getElementById('lives');
+const ammoEl=document.getElementById('ammo');
+function updateHUD(){scoreEl.textContent='Score: '+score;livesEl.textContent='♥'.repeat(lives);ammoEl.textContent='Ammo: '+(bulletCooldown<=0?'Ready':(bulletCooldownMax-bulletCooldown));}
+
+const endScreen=document.getElementById('endScreen');
+const endScoreEl=document.getElementById('endScore');
+document.getElementById('restartBtn').addEventListener('click',restartGame);
+document.getElementById('startBtn').addEventListener('click',startGame);
+
+function startGame(){if(started) return;started=true;document.getElementById('overlay').style.display='none';loop();}
+function endGame
