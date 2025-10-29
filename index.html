@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Triple Flak Defense — Part 2</title>
+<title>Triple Flak Defense — Part 3 (Waves)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <style>
   body{margin:0;background:#87CEEB;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden}
@@ -27,16 +27,22 @@ const COLORS = {
   heart: '#ff4444',
   ammo: '#00cc00',
   grass: '#228B22',
+  waveText: '#ff2222'
 };
 
-// State
-let phase = 'intro';          // 'intro' | 'playing' | 'gameover'
+// --- Game State / Phases ---
+let phase = 'intro';          // 'intro' | 'wavebreak' | 'playing' | 'gameover'
 let score = 0, health = 5, maxHealth = 5;
 let ammo = 500, maxAmmo = 500, reloadCooldown = 0, reloadTime = 120;
 let reloading = false;
-let gameOver = false;
 let frame = 0;
-let lastFlyover = 0;          // frames since last bomber flyover
+let lastFlyover = 0;
+
+// Wave system
+let currentWave = 1;
+let nextBreakScore = 5000;     // trigger at 5k, 10k, 15k, ...
+const BREAK_DURATION_FRAMES = 300; // 5 seconds @ 60fps
+let breakStartFrame = 0;
 
 // Turrets (triple)
 const turretPositions = [
@@ -60,7 +66,7 @@ const turrets = turretPositions.map(pos => ({
   }
 }));
 
-// Projectiles
+// Projectiles / FX
 const flakShells = [];
 const shrapnelPieces = [];
 const particles = [];
@@ -68,7 +74,7 @@ let bulletCooldown = 0;
 const bulletCooldownMax = 15;
 
 // Bombers & Bombs
-const introBombers = [];   // for the opening formation
+const introBombers = [];   // opening formation
 const bombers = [];        // periodic flyovers
 const bombs = [];
 
@@ -131,6 +137,33 @@ function drawTitle(){
   ctx.font='12px monospace'; ctx.fillText('Stand by...', W/2, 80);
 }
 
+function roman(n){
+  const map = [
+    [1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],
+    [100,'C'],[90,'XC'],[50,'L'],[40,'XL'],
+    [10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']
+  ];
+  let s='';
+  for(const [v,r] of map){ while(n>=v){ s+=r; n-=v; } }
+  return s;
+}
+
+function drawWaveBanner(num, elapsedFrames){
+  // Pulsing scale + alpha over time
+  const t = elapsedFrames / 60; // seconds-ish
+  const pulse = 0.08 * Math.sin(elapsedFrames * 0.3);
+  const alpha = 0.85 + 0.15*Math.sin(elapsedFrames * 0.6);
+  ctx.save();
+  ctx.globalAlpha = Math.max(0.3, Math.min(1, alpha));
+  ctx.translate(W/2, H/2 - 60);
+  ctx.scale(1+pulse, 1+pulse);
+  ctx.fillStyle = COLORS.waveText;
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 26px monospace';
+  ctx.fillText('WAVE ' + roman(num), 0, 0);
+  ctx.restore();
+}
+
 // ---------- Entities ----------
 function shoot(){
   if (bulletCooldown<=0 && ammo>0 && !reloading && phase==='playing'){
@@ -160,8 +193,8 @@ function spawnFlakExplosion(x,y){
   }
 }
 
+// Intro formation
 function spawnIntroFormation(){
-  // 5 bombers in a staggered V-ish line, left -> right
   const rows = [
     {x:-80, y:35, delay:0},
     {x:-120,y:50, delay:12},
@@ -178,7 +211,6 @@ function spawnIntroFormation(){
 }
 
 function spawnFlyover(){
-  // Top bomber, random side
   const fromLeft = Math.random()<0.5;
   bombers.push({
     x: fromLeft ? -60 : W+60,
@@ -188,45 +220,41 @@ function spawnFlyover(){
   });
 }
 
+function spawnBomb(x){
+  bombs.push({x: Math.max(10,Math.min(W-10,x)), y: -10, vy: 2.0 + Math.random()*1.2, r:5});
+}
+
 function spawnBombPattern(){
-  // Choose one of several patterns
-  const type = Math.floor(Math.random()*3); // 0: scatter, 1: burst cluster, 2: line
-  if (type===0){ // scatter
+  const type = Math.floor(Math.random()*3); // 0 scatter, 1 burst, 2 line
+  if (type===0){
     const n=2+Math.floor(Math.random()*4);
     for(let i=0;i<n;i++) spawnBomb(Math.random()*W);
-  } else if (type===1){ // burst cluster
+  } else if (type===1){
     const center = 20 + Math.random()*(W-40);
     for(let i=0;i<5;i++) spawnBomb(center + (Math.random()-0.5)*30);
-  } else { // line
+  } else {
     const start = Math.random()<0.5 ? 20 : W-20;
     const step = (start< W/2) ? 20 : -20;
     for(let i=0;i<6;i++) spawnBomb(start + i*step);
   }
 }
-function spawnBomb(x){
-  bombs.push({x: Math.max(10,Math.min(W-10,x)), y: -10, vy: 2.0 + Math.random()*1.2, r:5});
-}
 
 // ---------- Drawing helpers ----------
 function drawBomber(b){
-  // Simple B-17-ish profile: fuselage + wings + tail (side-on)
   ctx.save();
   ctx.translate(b.x, b.y);
-  // body
-  ctx.fillStyle = COLORS.bomber[0];
+  ctx.fillStyle = COLORS.bomber[0];         // fuselage
   ctx.fillRect(-18,-5,36,10);
-  // nose
-  ctx.fillStyle = COLORS.bomber[1];
+  ctx.fillStyle = COLORS.bomber[1];         // nose
   ctx.fillRect(18,-4,8,8);
-  // wings
-  ctx.fillStyle = COLORS.bomber[0];
+  ctx.fillStyle = COLORS.bomber[0];         // wings
   ctx.fillRect(-8,-10,16,6);
   ctx.fillRect(-6,4,12,6);
-  // tail
-  ctx.fillStyle = COLORS.bomber[2];
+  ctx.fillStyle = COLORS.bomber[2];         // tail
   ctx.fillRect(-22,-6,6,12);
   ctx.restore();
 }
+
 function drawBomb(bm){
   ctx.fillStyle = COLORS.bomb;
   ctx.fillRect(bm.x-2,bm.y-4,4,8);
@@ -241,6 +269,11 @@ window.addEventListener('keydown',e=>{
     if (phase==='gameover'){ restartGame(); return; }
     if (phase==='playing'){ shooting=true; shoot(); }
   }
+  if(e.code==='KeyR'){ // Manual reload
+    if (!reloading && ammo < maxAmmo && phase!=='gameover'){
+      reloading = true; reloadCooldown = 0;
+    }
+  }
 });
 window.addEventListener('keyup',e=>{
   if(e.key==='ArrowLeft') left=false;
@@ -248,25 +281,51 @@ window.addEventListener('keyup',e=>{
   if(e.code==='Space') shooting=false;
 });
 
+// ---------- Wave Flow Helpers ----------
+function startWaveBreak(waveNumber){
+  currentWave = waveNumber;
+  phase = 'wavebreak';
+  breakStartFrame = frame;
+}
+
+function endWaveBreak(){
+  phase = 'playing';
+  lastFlyover = frame; // reset bomber timer so we don't insta-spawn during the banner
+}
+
+function checkWaveProgress(){
+  // Trigger a new break exactly when score meets/exceeds each 5000 step
+  if (phase==='playing' && score >= nextBreakScore){
+    startWaveBreak(currentWave + 1);
+    nextBreakScore += 5000;
+  }
+}
+
 // ---------- Game Flow ----------
-function beginGame(){ phase='playing'; lastFlyover = frame; }
+function beginFirstWaveAfterIntro(){
+  // After intro, start with Wave I banner for 5s
+  startWaveBreak(1);
+}
 
 function restartGame(){
   score=0; health=5; ammo=maxAmmo;
   flakShells.length=0; shrapnelPieces.length=0; particles.length=0;
   bombs.length=0; bombers.length=0; introBombers.length=0;
-  phase='intro'; gameOver=false; frame=0;
+  phase='intro'; frame=0; reloading=false; bulletCooldown=0;
+  currentWave = 1; nextBreakScore = 5000; breakStartFrame = 0;
+  lastFlyover = 0;
   spawnIntroFormation();
 }
 
-// ---------- Loop ----------
+// ---------- Init ----------
 spawnIntroFormation();
 
+// ---------- Main Loop ----------
 function loop(){
   frame++;
   drawBackground();
 
-  // Turrets always draw (locked during intro)
+  // Turrets always draw (rotation only during playing)
   turrets.forEach(t=>{
     if(phase==='playing'){
       if(left) t.angle -= 0.05;
@@ -276,59 +335,64 @@ function loop(){
     t.draw();
   });
 
-  // Intro formation
+  // --- INTRO: formation passes, then Wave I break ---
   if (phase==='intro'){
     drawTitle();
-    let activeCount = 0;
     for (let i=introBombers.length-1;i>=0;i--){
       const b=introBombers[i];
       if (b.delay>0){ b.delay--; continue; }
-      b.active = true;
-      activeCount++;
       b.x += b.vx;
       drawBomber(b);
     }
-    // if all have left the screen -> start
-    const allGone = introBombers.every(b=> b.active && b.x > W+80);
+    const allGone = introBombers.every(b=> b.delay<=0 && b.x > W+80);
     if (allGone){
+      // Show a little "Incoming Raid!" for flavor, then wave I
       ctx.fillStyle='#000'; ctx.font='16px monospace'; ctx.textAlign='center';
       ctx.fillText('INCOMING RAID!', W/2, 130);
-      // small delay then begin
-      if (frame>180) beginGame();
+      if (frame>180) beginFirstWaveAfterIntro();
     }
   }
 
+  // --- WAVE BREAK: show pulsing banner, pause spawns for 5s ---
+  if (phase==='wavebreak'){
+    const elapsed = frame - breakStartFrame;
+    drawWaveBanner(currentWave, elapsed);
+    // No spawns during break. You can still rotate/aim/reload.
+    if (elapsed >= BREAK_DURATION_FRAMES){
+      endWaveBreak(); // start playing after 5s
+    }
+  }
+
+  // --- PLAYING: normal action ---
   if (phase==='playing'){
-    // shoot on hold
+    // continuous fire
     if (bulletCooldown>0) bulletCooldown--;
     if (shooting && bulletCooldown<=0) shoot();
 
-    // reload
+    // reload progress
     if (reloading){
       reloadCooldown++;
       if (reloadCooldown>=reloadTime){ ammo=maxAmmo; reloading=false; }
     }
 
-    // Periodic bomber flyover every ~300 frames (5s @ 60fps)
+    // periodic bomber flyover every 5s
     if (frame - lastFlyover >= 300){
       spawnFlyover();
       lastFlyover = frame;
     }
 
-    // Bomb spawn rhythm
+    // bomb spawn rhythm
     if (frame % 45 === 0) spawnBombPattern();
 
-    // Flak shells
+    // Flak shells (auto-detonate near bombs or bombers)
     for (let i=flakShells.length-1;i>=0;i--){
       const f=flakShells[i];
       f.x += f.vx; f.y += f.vy; f.life--;
-      // proximity detonation near bombs or bombers
       let detonate=false;
       for (const m of bombs){ if (Math.hypot(f.x-m.x,f.y-m.y) < 40){ detonate=true; break; } }
       if (!detonate){
         for (const b of bombers){ if (Math.hypot(f.x-b.x,f.y-b.y) < 40){ detonate=true; break; } }
       }
-      // draw
       ctx.fillStyle = COLORS.flak; ctx.fillRect(f.x-2,f.y-2,4,4);
       if (f.life<=0 || detonate || f.y<-20) { spawnFlakExplosion(f.x,f.y); flakShells.splice(i,1); }
     }
@@ -358,8 +422,10 @@ function loop(){
           b.hp -= 1;
           if (b.hp<=0){
             bombers.splice(k,1);
-            score += 100; // ✅ bomber kill reward
+            score += 100;
             spawnFlakExplosion(b.x,b.y);
+            // Check immediately if we crossed a wave threshold with this kill
+            checkWaveProgress();
           }
           shrapnelPieces.splice(i,1);
           break;
@@ -389,7 +455,7 @@ function loop(){
         if (health<=0){
           const high=parseInt(localStorage.getItem('highScore'))||0;
           if (score>high) localStorage.setItem('highScore', score);
-          phase='gameover'; gameOver=true;
+          phase='gameover';
         }
         continue;
       }
@@ -402,12 +468,15 @@ function loop(){
           if (health<=0){
             const high=parseInt(localStorage.getItem('highScore'))||0;
             if (score>high) localStorage.setItem('highScore', score);
-            phase='gameover'; gameOver=true;
+            phase='gameover';
           }
           break;
         }
       }
     }
+
+    // After all updates, check score threshold for next wave break
+    checkWaveProgress();
   }
 
   // Particles (smoke/explosions)
