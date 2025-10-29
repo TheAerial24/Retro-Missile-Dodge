@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Anti-Air Turret Defense</title>
+<title>Triple Anti-Air Defense</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <style>
 body {
@@ -42,31 +42,34 @@ const COLORS = {
 
 // Game state
 let score = 0, health = 5, maxHealth = 5;
-let ammo = 75, maxAmmo = 75, reloadCooldown = 0, reloadTime = 120;
+let ammo = 500, maxAmmo = 500, reloadCooldown = 0, reloadTime = 120;
 let reloading = false;
 let gameOver = false;
 
-// Turret
-const turret = {
-  x: W / 2,
-  y: H - 40,
+// === MULTI-TURRET SYSTEM ===
+const turretPositions = [
+  { x: W/2, y: H-40, angleOffset: 0 },      // center
+  { x: W/2 - 70, y: H-40, angleOffset: -0.1 }, // left
+  { x: W/2 + 70, y: H-40, angleOffset: 0.1 }   // right
+];
+
+const turrets = turretPositions.map(pos => ({
+  ...pos,
   baseW: 32,
   baseH: 16,
   barrelLength: 20,
-  angle: 0, // 0 = straight up
+  angle: 0,
   draw() {
-    // Base
     ctx.fillStyle = COLORS.turret[0];
     ctx.fillRect(this.x - this.baseW/2, this.y - this.baseH/2, this.baseW, this.baseH);
-    // Barrel
     ctx.save();
     ctx.translate(this.x, this.y - this.baseH/2);
-    ctx.rotate(this.angle);
+    ctx.rotate(this.angle + this.angleOffset);
     ctx.fillStyle = COLORS.turret[2];
     ctx.fillRect(-2, -this.barrelLength, 4, this.barrelLength);
     ctx.restore();
   }
-};
+}));
 
 // Bullets
 const bullets = [];
@@ -74,18 +77,19 @@ let bulletCooldown = 0;
 const bulletCooldownMax = 12;
 function shoot() {
   if (bulletCooldown <= 0 && ammo > 0 && !reloading && !gameOver) {
-    // FIXED bullet direction
-    const vx = Math.sin(turret.angle) * -6.5;
-    const vy = Math.cos(turret.angle) * -6.5;
-    bullets.push({
-      x: turret.x,
-      y: turret.y - turret.baseH/2 - 4,
-      vx, vy,
-      w: 2, h: 6,
-      draw() {
-        ctx.fillStyle = COLORS.bullet;
-        ctx.fillRect(this.x - this.w/2, this.y - this.h/2, this.w, this.h);
-      }
+    turrets.forEach(t => {
+      const vx = Math.sin(t.angle + t.angleOffset) * 6.5;
+      const vy = -Math.cos(t.angle + t.angleOffset) * 6.5;
+      bullets.push({
+        x: t.x,
+        y: t.y - t.baseH/2 - 4,
+        vx, vy,
+        w: 2, h: 6,
+        draw() {
+          ctx.fillStyle = COLORS.bullet;
+          ctx.fillRect(this.x - this.w/2, this.y - this.h/2, this.w, this.h);
+        }
+      });
     });
     bulletCooldown = bulletCooldownMax;
     ammo--;
@@ -93,7 +97,7 @@ function shoot() {
   }
 }
 
-// Enemy planes
+// Enemies
 const enemies = [];
 function spawnEnemy() {
   let e = { w: 24, h: 20 };
@@ -107,7 +111,6 @@ function spawnEnemy() {
   e.draw = function() {
     ctx.save();
     ctx.translate(this.x, this.y);
-    // Face downward
     ctx.rotate(this.angle + Math.PI/2);
     ctx.fillStyle = COLORS.enemy[0];
     ctx.fillRect(-4, -8, 8, 16);
@@ -200,8 +203,8 @@ function drawHUD() {
   }
 
   // Ammo bar
-  const barWidth = 75, barHeight = 8;
-  const x = turret.x - barWidth/2, y = turret.y - turret.baseH/2 - 16;
+  const barWidth = 120, barHeight = 8;
+  const x = W/2 - barWidth/2, y = H - 30;
   ctx.fillStyle = '#555';
   ctx.fillRect(x, y, barWidth, barHeight);
   ctx.fillStyle = COLORS.ammo;
@@ -227,7 +230,7 @@ function drawGameOver() {
 }
 
 function restartGame() {
-  score = 0; health = 5; ammo = 75;
+  score = 0; health = 5; ammo = maxAmmo;
   enemies.length = 0; bullets.length = 0; particles.length = 0;
   gameOver = false;
 }
@@ -238,11 +241,13 @@ function loop() {
   drawBackground();
 
   if (!gameOver) {
-    // FIXED turret controls (normal feel)
-    if (left) turret.angle -= 0.05;   // Left arrow → aim left
-    if (right) turret.angle += 0.05;  // Right arrow → aim right
-    turret.angle = Math.max(-Math.PI/4, Math.min(Math.PI/4, turret.angle));
-    turret.draw();
+    // Turrets rotate together
+    turrets.forEach(t => {
+      if (left) t.angle -= 0.05;
+      if (right) t.angle += 0.05;
+      t.angle = Math.max(-Math.PI/4, Math.min(Math.PI/4, t.angle));
+      t.draw();
+    });
 
     if (bulletCooldown > 0) bulletCooldown--;
     if (shooting && bulletCooldown <= 0) shoot();
@@ -264,8 +269,8 @@ function loop() {
     // Enemies
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
-      const dx = turret.x - e.x;
-      const dy = (turret.y - e.y);
+      const dx = W/2 - e.x;
+      const dy = (H - 40 - e.y);
       const dist = Math.hypot(dx, dy);
       if (dist > 40) {
         const desiredAngle = Math.atan2(dy, dx);
@@ -279,19 +284,21 @@ function loop() {
       e.angle = Math.atan2(e.vy, e.vx);
       e.draw();
 
-      // Collision with turret
-      const turretRadius = 20;
-      const enemyRadius = 12;
-      if (dist < turretRadius + enemyRadius) {
-        spawnExplosion(e.x, e.y, '#ff4444');
-        enemies.splice(i, 1);
-        health--;
-        if (health <= 0) {
-          const highScore = parseInt(localStorage.getItem('highScore')) || 0;
-          if (score > highScore) localStorage.setItem('highScore', score);
-          gameOver = true;
+      // Collision with turrets (same health)
+      for (const t of turrets) {
+        const turretRadius = 20, enemyRadius = 12;
+        const d = Math.hypot(t.x - e.x, t.y - e.y);
+        if (d < turretRadius + enemyRadius) {
+          spawnExplosion(e.x, e.y, '#ff4444');
+          enemies.splice(i, 1);
+          health--;
+          if (health <= 0) {
+            const highScore = parseInt(localStorage.getItem('highScore')) || 0;
+            if (score > highScore) localStorage.setItem('highScore', score);
+            gameOver = true;
+          }
+          continue;
         }
-        continue;
       }
 
       // Bullet collision
