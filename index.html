@@ -74,7 +74,7 @@ let bulletCooldown = 0;
 const bulletCooldownMax = 12;
 function shoot() {
   if (bulletCooldown <= 0 && ammo > 0 && !reloading && !gameOver) {
-    const vx = Math.sin(-turret.angle) * 6.5;
+    const vx = Math.sin(turret.angle) * 6.5;
     const vy = -Math.cos(turret.angle) * 6.5;
     bullets.push({
       x: turret.x,
@@ -106,7 +106,8 @@ function spawnEnemy() {
   e.draw = function() {
     ctx.save();
     ctx.translate(this.x, this.y);
-    ctx.rotate(this.angle);
+    // Add π/2 so plane faces downward
+    ctx.rotate(this.angle + Math.PI/2);
     ctx.fillStyle = COLORS.enemy[0];
     ctx.fillRect(-4, -8, 8, 16);
     ctx.fillStyle = COLORS.enemy[1];
@@ -236,9 +237,9 @@ function loop() {
   drawBackground();
 
   if (!gameOver) {
-    // Turret rotation
-    if (left) turret.angle -= 0.05;
-    if (right) turret.angle += 0.05;
+    // Turret rotation (fixed controls)
+    if (left) turret.angle += 0.05;     // left arrow -> rotate counterclockwise
+    if (right) turret.angle -= 0.05;    // right arrow -> rotate clockwise
     turret.angle = Math.max(-Math.PI/4, Math.min(Math.PI/4, turret.angle));
     turret.draw();
 
